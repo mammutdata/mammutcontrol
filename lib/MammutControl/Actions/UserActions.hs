@@ -1,0 +1,79 @@
+module MammutControl.Actions.UserActions
+  ( LoginInfo(..)
+  , UserCredentials(..)
+  , signinAction
+  , UserCreationData
+  , createUserAction
+  , UserEditionData
+  , editUserAction
+  , deleteUserAction
+  ) where
+
+import           Data.Aeson
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Lazy.Encoding as TLE
+
+import           Servant
+import           Servant.Auth.Server
+
+import           MammutControl.Actions.Helpers
+import           MammutControl.Data.User
+
+data LoginInfo = LoginInfo User BSL.ByteString
+
+instance ToJSON LoginInfo where
+  toJSON (LoginInfo uid token) = object
+    [ "user"  .= uid
+    , "token" .= TLE.decodeUtf8 token
+    ]
+
+data UserCredentials = UserCredentials T.Text BS.ByteString
+
+instance FromJSON UserCredentials where
+  parseJSON = withObject "user credentials" $ \obj -> UserCredentials
+    <$> obj .: "email"
+    <*> fmap TE.encodeUtf8 (obj .: "password")
+
+signinAction :: JWTSettings -> UserCredentials -> ConcreteAction LoginInfo
+signinAction jwtSettings (UserCredentials email password) = do
+  user <- getUserByEmail email
+  validatePassword user password
+  token <- makeSessionToken jwtSettings user
+  return $ LoginInfo user token
+
+data UserCreationData = UserCreationData T.Text BS.ByteString
+
+instance FromJSON UserCreationData where
+  parseJSON = withObject "user creation data" $ \obj -> UserCreationData
+    <$> obj .: "email"
+    <*> fmap TE.encodeUtf8 (obj .: "password")
+
+createUserAction :: JWTSettings -> UserCreationData -> ConcreteAction LoginInfo
+createUserAction jwtSettings (UserCreationData email password) = do
+  user  <- createUser email password
+  token <- makeSessionToken jwtSettings user
+  return $ LoginInfo user token
+
+data UserEditionData = UserEditionData (Maybe BS.ByteString) (User' Maybe)
+
+instance FromJSON UserEditionData where
+  parseJSON = withObject "user edition data" $ \obj -> UserEditionData
+    <$> fmap (fmap TE.encodeUtf8) (obj .:? "password")
+    <*> parseJSON (Object obj)
+
+editUserAction :: UserID -> UserEditionData -> ConcreteAction User
+editUserAction uid (UserEditionData mPassword fields) = do
+  fields' <- case mPassword of
+    Nothing -> return fields
+    Just pwd -> do
+      hash <- hashPassword pwd
+      return $ fields { userPasswordHash = Just hash }
+  editUser uid fields'
+
+deleteUserAction :: UserID -> ConcreteAction NoContent
+deleteUserAction uid = do
+  deleteUser uid
+  return NoContent

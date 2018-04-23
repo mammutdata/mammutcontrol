@@ -1,0 +1,77 @@
+name:         mammut-control
+version:      0.9.0
+synopsis:     Mammut control API and web site
+category:     Backup
+homepage:     https://www.mammutdata.com
+author:       Thomas Feron <thomas.feron@redspline.com>
+license-file: LICENSE
+
+ghc-options:
+  - -Wall
+
+dependencies:
+  - base >=4.9 && <5
+  - extensible-effects
+
+default-extensions:
+  - Arrows
+  - ConstraintKinds
+  - DataKinds
+  - DeriveAnyClass
+  - DeriveGeneric
+  - FlexibleContexts
+  - FlexibleInstances
+  - GADTs
+  - LambdaCase
+  - MultiParamTypeClasses
+  - OverloadedStrings
+  - RankNTypes
+  - RecordWildCards
+  - ScopedTypeVariables
+  - StandaloneDeriving
+  - TypeFamilies
+  - TypeOperators
+
+library:
+  source-dirs: lib
+  dependencies:
+    - aeson
+    - bcrypt
+    - bytestring
+    - monad-control
+    - mtl
+    - opaleye
+    - optparse-applicative
+    - postgresql-simple
+    - product-profunctors
+    - profunctors
+    - resource-pool
+    - servant
+    - servant-auth
+    - servant-auth-server
+    - servant-server
+    - text
+    - time
+    - transformers-base
+    - yaml
+
+executables:
+  mammut-control:
+    source-dirs: src
+    main:        Main.hs
+    dependencies:
+      - mammut-control
+      - optparse-applicative
+      - warp
+
+tests:
+  unit-tests:
+    source-dirs: tests
+    main:        Suite.hs
+    ghc-options: -threaded
+    dependencies:
+      - hedgehog
+      - mammut-control
+      - tasty
+      - tasty-hedgehog
+      - tasty-hunit
