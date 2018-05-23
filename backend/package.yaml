@@ -35,7 +35,7 @@ default-extensions:
   - TypeOperators
 
 library:
-  source-dirs: lib
+  source-dirs: src
   dependencies:
     - aeson
     - bcrypt
@@ -59,8 +59,8 @@ library:
 
 executables:
   mammut-control:
-    source-dirs: src
-    main:        Main.hs
+    source-dirs: .
+    main:        Server.hs
     dependencies:
       - mammut-control
       - optparse-applicative
