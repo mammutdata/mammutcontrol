@@ -7,10 +7,11 @@ import Servant.Server
 
 data MCError
   = ResourceNotFoundError String
-  | ValidationError String String
+  | ValidationError (Maybe String) String
   | AuthenticationError String
   | InternalError String
   | AccessDenied String
+  deriving Show
 
 toServantErr :: MCError -> ServantErr
 toServantErr = \case

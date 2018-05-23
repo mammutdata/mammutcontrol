@@ -10,8 +10,10 @@ import Servant.Auth.Server
 
 import MammutControl.Actions.Helpers
 import MammutControl.Actions.UserActions
+import MammutControl.Actions.WalletActions
 import MammutControl.Data.Types
 import MammutControl.Data.User
+import MammutControl.Data.Wallet
 import MammutControl.Error
 
 type MammutControlAPI =
@@ -21,22 +23,29 @@ type UnauthenticatedAPI =
   "users" :> "signin" :> ReqBody '[JSON] UserCredentials
           :> Post '[JSON] LoginInfo
 
-  :<|> "users" :> ReqBody '[JSON] UserCreationData :> Post '[JSON] LoginInfo
+  :<|> "users" :> ReqBody '[JSON] UserCreationData
+               :> PostCreated '[JSON] LoginInfo
 
 type AuthenticatedAPI =
   "users" :> Capture "user_id" UserID :> ReqBody '[JSON] UserEditionData
           :> Put '[JSON] User
   :<|> "users" :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
 
-unauthenticatedAPI :: JWTSettings -> ServerT UnauthenticatedAPI ConcreteAction
+  :<|> "users" :> Capture "user_id" UserID :> "wallets" :> Get '[JSON] [Wallet]
+  :<|> "wallets" :> ReqBody '[JSON] WalletData :> PostCreated '[JSON] Wallet
+
+unauthenticatedAPI :: JWTSettings -> ServerT UnauthenticatedAPI Action
 unauthenticatedAPI jwtSettings =
   signinAction jwtSettings
   :<|> createUserAction jwtSettings
 
-authenticatedAPI :: Session -> ServerT AuthenticatedAPI ConcreteAction
+authenticatedAPI :: Session -> ServerT AuthenticatedAPI Action
 authenticatedAPI session =
   editUserAction
   :<|> deleteUserAction
+
+  :<|> getWalletsAction
+  :<|> createWalletAction session
 
 api :: Pool Connection -> IO Application
 api pool = do

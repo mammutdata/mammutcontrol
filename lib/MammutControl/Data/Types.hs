@@ -14,6 +14,10 @@ module MammutControl.Data.Types
 import           GHC.Generics
 
 import           Control.Arrow
+import           Control.Exception (mask, onException)
+import           Control.Monad.Base
+import           Control.Monad.Except
+import           Control.Monad.Reader
 
 import           Data.Functor.Identity (Identity)
 import           Data.Int (Int64)
@@ -21,11 +25,15 @@ import           Data.Pool (Pool, withResource)
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
+import           Data.Time (UTCTime, getCurrentTime)
 import qualified Data.Text as T
 
-import           Database.PostgreSQL.Simple (Connection)
+import           Database.PostgreSQL.Simple ( Connection, begin, commit
+                                            , rollback )
 
 import           Opaleye
+
+import           MammutControl.Error
 
 data TblCol a
 data Col a
@@ -33,7 +41,10 @@ data WriteCol a
 data Write a
 
 type family ColumnType a
-type instance ColumnType T.Text = PGText
+type instance ColumnType T.Text    = PGText
+type instance ColumnType Int       = PGInt4
+type instance ColumnType UTCTime   = PGTimestamptz
+type instance ColumnType (Maybe a) = Nullable (ColumnType a)
 
 data ReqOpt = Req | Opt
 
@@ -50,11 +61,17 @@ type family Field f req a where
 class HoistField a b where
   hoistField :: a -> b
 
-instance HoistField a a where
+instance {-# OVERLAPPABLE #-} a ~ b => HoistField a b where
   hoistField = id
 
 instance HoistField a (Maybe a) where
   hoistField = Just
+
+instance HoistField a b => HoistField (Maybe a) (Maybe b) where
+  hoistField = fmap hoistField
+
+instance Default Constant a (Column b) => HoistField a (Column b) where
+  hoistField = constant
 
 hoistFields :: forall t (f :: k) (g :: k).
                ( Generic (t f), Generic (t g)
@@ -82,3 +99,50 @@ instance (GHoistFields a c, GHoistFields b d)
     => GHoistFields (a :+: b) (c :+: d) where
   ghoistFields (L1 x) = L1 $ ghoistFields x
   ghoistFields (R1 x) = R1 $ ghoistFields x
+
+newtype DataM a
+  = DataM { unDataM :: ReaderT (Either Connection (Pool Connection))
+                               (ExceptT MCError IO) a }
+  deriving newtype ( Applicative, Functor, Monad, MonadBase IO
+                   , MonadError MCError
+                   , MonadReader (Either Connection (Pool Connection))
+                   )
+
+runDataM :: DataM a -> Pool Connection -> IO (Either MCError a)
+runDataM action pool =
+  runExceptT $ flip runReaderT (Right pool) $ unDataM action
+
+withConn :: (Connection -> IO a) -> DataM a
+withConn f = do
+  eConn <- ask
+  case eConn of
+    Left conn -> liftBase $ f conn
+    Right pool -> liftBase $ withResource pool f
+
+class Monad m => MonadTransaction m where
+  withTransaction :: m a -> m a
+
+instance MonadTransaction DataM where
+  withTransaction action = do
+    eConn <- ask
+    case eConn of
+      Left _ -> action
+      Right _ ->  do
+        eRes <- withConn $ \conn -> mask $ \restore -> do
+          begin conn
+          r <- restore (runExceptT (runReaderT (unDataM action) (Left conn)))
+                 `onException` rollback conn
+          case r of
+            Left  _ -> rollback conn
+            Right _ -> commit conn
+          return r
+        either throwError return eRes
+
+class Monad m => MonadTime m where
+  getTime :: m UTCTime
+
+instance MonadTime DataM where
+  getTime = liftBase getCurrentTime
+
+instance MonadTime m => MonadTime (ReaderT r m) where
+  getTime = lift getTime

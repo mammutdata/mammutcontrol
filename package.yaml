@@ -11,17 +11,19 @@ ghc-options:
 
 dependencies:
   - base >=4.9 && <5
-  - extensible-effects
 
 default-extensions:
   - Arrows
   - ConstraintKinds
   - DataKinds
   - DeriveAnyClass
+  - DeriveFunctor
   - DeriveGeneric
+  - DerivingStrategies
   - FlexibleContexts
   - FlexibleInstances
   - GADTs
+  - GeneralizedNewtypeDeriving
   - LambdaCase
   - MultiParamTypeClasses
   - OverloadedStrings

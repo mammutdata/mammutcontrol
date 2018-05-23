@@ -4,15 +4,15 @@ module MammutControl.Actions.Helpers
   , throwError
   ) where
 
-import           Control.Eff
-import           Control.Eff.Exception (Exc, runError, throwError)
-import           Control.Eff.Lift (Lift, lift, runLift)
-import           Control.Monad.Trans (liftIO)
-import qualified Control.Monad.Except as Except
+import           Control.Monad.Base
+import           Control.Monad.Except
+import           Control.Monad.Reader
 
 import           Data.Aeson
 import           Data.Time (addUTCTime)
 import qualified Data.ByteString.Lazy as BSL
+
+import           System.IO
 
 import           Servant.Auth.Server
 import           Servant.Server
@@ -20,19 +20,19 @@ import           Servant.Server
 import           MammutControl.AccessControl
 import           MammutControl.Data.Types
 import           MammutControl.Data.User
+import           MammutControl.Data.Wallet
 import           MammutControl.Error
-import           MammutControl.Time
 
-type ActionConstraints r = ( Member (Exc MCError) r, Member Time r
-                           , Member UserAccess r )
+type Action = AccessControlT DataM
 
-type Action a = forall r. ActionConstraints r => Eff r a
+type MonadAction m = ( MonadError MCError m
+                     , MonadTime m
+                     , MonadTransaction m
+                     , MonadUser m
+                     , MonadWallet m
+                     )
 
-type ConcreteAction = Eff '[Exc MCError, Time, UserAccess, Lift Handler]
-
-newtype Session = Session
-  { sessionUserID :: UserID
-  }
+newtype Session = Session { sessionUserID :: UserID }
 
 instance FromJWT Session
 instance ToJWT   Session
@@ -46,20 +46,22 @@ instance ToJSON Session where
     [ "user_id" .= sessionUserID
     ]
 
-makeSessionToken :: JWTSettings -> User -> ConcreteAction BSL.ByteString
+makeSessionToken :: (MonadBase IO m, MonadAction m)
+                 => JWTSettings -> User -> m BSL.ByteString
 makeSessionToken jwtSettings user = do
   time <- getTime
   let session = Session { sessionUserID = userID user }
-  eRes <- lift $ liftIO $
-    makeJWT session jwtSettings (Just (addUTCTime 86400 time))
+  eRes <- liftBase $ makeJWT session jwtSettings (Just (addUTCTime 86400 time))
   case eRes of
     Left  err   -> throwError $ AuthenticationError $ show err
     Right token -> return token
 
-runAction :: Pool Connection -> Maybe Session -> ConcreteAction a -> Handler a
+runAction :: Pool Connection -> Maybe Session -> Action a -> Handler a
 runAction pool mSession action = do
-  eRes <- runLift $ runUserAccess pool $ runTime $ runError $
-    checkAccess (fmap sessionUserID mSession) action
+  eRes <- liftIO $ flip runDataM pool $ withTransaction $
+    runAccessControlT action (sessionUserID <$> mSession)
   case eRes of
-    Left  err -> Except.throwError $ toServantErr err
+    Left err -> do
+      liftIO $ hPutStrLn stderr $ "Error running action: " ++ show err
+      throwError $ toServantErr err
     Right res -> return res

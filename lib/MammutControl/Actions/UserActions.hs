@@ -9,6 +9,8 @@ module MammutControl.Actions.UserActions
   , deleteUserAction
   ) where
 
+import           Control.Monad.Base
+
 import           Data.Aeson
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
@@ -20,7 +22,9 @@ import           Servant
 import           Servant.Auth.Server
 
 import           MammutControl.Actions.Helpers
+import           MammutControl.Data.Types
 import           MammutControl.Data.User
+import           MammutControl.Data.Wallet
 
 data LoginInfo = LoginInfo User BSL.ByteString
 
@@ -37,23 +41,36 @@ instance FromJSON UserCredentials where
     <$> obj .: "email"
     <*> fmap TE.encodeUtf8 (obj .: "password")
 
-signinAction :: JWTSettings -> UserCredentials -> ConcreteAction LoginInfo
+signinAction :: (MonadBase IO m, MonadAction m)
+             => JWTSettings -> UserCredentials -> m LoginInfo
 signinAction jwtSettings (UserCredentials email password) = do
   user <- getUserByEmail email
   validatePassword user password
   token <- makeSessionToken jwtSettings user
   return $ LoginInfo user token
 
-data UserCreationData = UserCreationData T.Text BS.ByteString
+data UserCreationData = UserCreationData T.Text T.Text BS.ByteString
 
 instance FromJSON UserCreationData where
   parseJSON = withObject "user creation data" $ \obj -> UserCreationData
     <$> obj .: "email"
+    <*> obj .: "name"
     <*> fmap TE.encodeUtf8 (obj .: "password")
 
-createUserAction :: JWTSettings -> UserCreationData -> ConcreteAction LoginInfo
-createUserAction jwtSettings (UserCreationData email password) = do
-  user  <- createUser email password
+createUserAction :: (MonadBase IO m, MonadAction m)
+                 => JWTSettings -> UserCreationData -> m LoginInfo
+createUserAction jwtSettings (UserCreationData email name password) = do
+  let wallet = Wallet
+        { walletID           = Nothing
+        , walletName         = "personal"
+        , walletDescription  = Just (Just "This wallet was automatically\
+                                          \ created together with your\
+                                          \ account.")
+        , walletCredits      = Nothing
+        , walletCreationTime = Nothing
+        }
+  user <- createUserFromData email name password
+  _     <- createWallet wallet (userID user)
   token <- makeSessionToken jwtSettings user
   return $ LoginInfo user token
 
@@ -64,7 +81,7 @@ instance FromJSON UserEditionData where
     <$> fmap (fmap TE.encodeUtf8) (obj .:? "password")
     <*> parseJSON (Object obj)
 
-editUserAction :: UserID -> UserEditionData -> ConcreteAction User
+editUserAction :: MonadAction m => UserID -> UserEditionData -> m User
 editUserAction uid (UserEditionData mPassword fields) = do
   fields' <- case mPassword of
     Nothing -> return fields
@@ -73,7 +90,7 @@ editUserAction uid (UserEditionData mPassword fields) = do
       return $ fields { userPasswordHash = Just hash }
   editUser uid fields'
 
-deleteUserAction :: UserID -> ConcreteAction NoContent
+deleteUserAction :: MonadAction m => UserID -> m NoContent
 deleteUserAction uid = do
   deleteUser uid
   return NoContent

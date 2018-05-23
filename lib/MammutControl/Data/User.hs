@@ -5,31 +5,28 @@ module MammutControl.Data.User
   , UserID(..)
   , User'(..)
   , User
-  , UserAccess(..)
-  , hashPassword
+  , MonadUser(..)
+  , userByID
+  , createUserFromData
   , validatePassword
-  , createUser
-  , getUser
-  , getUserByEmail
   , editUser
-  , deleteUser
-  , runUserAccess
   ) where
 
-import           GHC.Generics (Generic)
+import           Prelude hiding (null)
 
 import           Control.Arrow
-import           Control.Eff
-import           Control.Eff.Exception (Exc, catchError, throwError)
-import           Control.Eff.Lift (Lift, lift)
 import           Control.Monad (unless, void, when)
 import           Control.Monad.Base
+import           Control.Monad.Except (MonadError, catchError, throwError)
 import           Control.Monad.Trans.Control
 
 import           Data.Aeson
+import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
+import           Data.Proxy
+import           Data.Time (UTCTime)
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
 
@@ -50,71 +47,70 @@ newtype PasswordHash = PasswordHash { unPasswordHash :: BS.ByteString }
 
 type instance ColumnType PasswordHash = PGBytea
 
-instance QueryRunnerColumnDefault PGBytea PasswordHash where
-  queryRunnerColumnDefault = fmap PasswordHash queryRunnerColumnDefault
+deriving newtype instance QueryRunnerColumnDefault PGBytea PasswordHash
 
-pgPasswordHash :: PasswordHash -> Column (ColumnType PasswordHash)
-pgPasswordHash = pgStrictByteString . unPasswordHash
+instance Default Constant PasswordHash (Column PGBytea) where
+  def = lmap unPasswordHash def
 
 newtype UserID = UserID { unUserID :: Int64 } deriving Eq
 
 type instance ColumnType UserID = PGInt8
 
-instance QueryRunnerColumnDefault PGInt8 UserID where
-  queryRunnerColumnDefault = fmap UserID queryRunnerColumnDefault
+deriving newtype instance QueryRunnerColumnDefault PGInt8 UserID
+deriving newtype instance FromHttpApiData UserID
+deriving newtype instance FromJSON UserID
+deriving newtype instance ToJSON UserID
 
-instance FromHttpApiData UserID where
-  parseUrlPiece = fmap UserID . parseUrlPiece
-
-instance FromJSON UserID where
-  parseJSON = fmap UserID . parseJSON
-
-instance ToJSON UserID where
-  toJSON = toJSON . unUserID
-
-pgUserID :: UserID -> Column (ColumnType UserID)
-pgUserID = pgInt8 . unUserID
+instance Default Constant UserID (Column PGInt8) where
+  def = lmap unUserID def
 
 data User' f = User
   { userID           :: Field f 'Opt UserID
   , userEmail        :: Field f 'Req T.Text
+  , userName         :: Field f 'Req T.Text
   , userPasswordHash :: Field f 'Req PasswordHash
+  , userCreationTime :: Field f 'Opt UTCTime
   } deriving Generic
 
 type User = User' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
                   , Default p (Field f 'Opt UserID) (Field g 'Opt UserID)
+                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
                   , Default p (Field f 'Req PasswordHash)
                               (Field g 'Req PasswordHash)
+                  , Default p (Field f 'Opt UTCTime) (Field g 'Opt UTCTime)
                   ) => Default p (User' f) (User' g)
 
 instance ToJSON User where
   toJSON User{..} = object
     [ "id"    .= userID
-    , "email" .= userEmail
+    , "email" .= userEmail -- FIXME: personal info
+    , "name"  .= userName
     ]
 
 instance FromJSON (User' Maybe) where
   parseJSON = withObject "user" $ \obj -> do
     mEmail <- obj .:? "email"
-    return $ emptyUser { userEmail = mEmail }
+    mName  <- obj .:? "name"
+    return emptyUser { userEmail = mEmail, userName = mName }
 
 emptyUser :: User' Maybe
-emptyUser = User Nothing Nothing Nothing
+emptyUser = User Nothing Nothing Nothing Nothing Nothing
 
 pUser :: User' TblCol -> TableColumns (User' WriteCol) (User' Col)
 pUser = genericAdaptor
 
 userTable :: Table (User' WriteCol) (User' Col)
-userTable = table "users" $ pUser User
+userTable = table "active_users" $ pUser User
   { userID           = tableColumn "id"
   , userEmail        = tableColumn "email"
+  , userName         = tableColumn "name"
   , userPasswordHash = tableColumn "password_hash"
+  , userCreationTime = tableColumn "creation_time"
   }
 
-userByID :: QueryArr (Column PGInt8) (User' Col)
+userByID :: QueryArr (Column (ColumnType UserID)) (User' Col)
 userByID = proc uid -> do
   user <- queryTable userTable -< ()
   restrict -< userID user .== uid
@@ -130,27 +126,23 @@ userByEmail = proc email -> do
  - Logic
  -}
 
-createUser :: (Member (Exc MCError) r, Member UserAccess r)
-           => T.Text -> BS.ByteString -> Eff r User
-createUser email password = do
+createUserFromData :: (MonadError MCError m, MonadTime m, MonadUser m)
+                   => T.Text -> T.Text -> BS.ByteString -> m User
+createUserFromData email name password = do
   hash <- hashPassword password
+  now <- getTime
   let user = User
         { userID           = Nothing
         , userEmail        = email
+        , userName         = name
         , userPasswordHash = hash
+        , userCreationTime = Just now
         }
   validateUser $ hoistFields user
-  eUser <- send $ CreateUser user
-  either throwError return eUser
+  createUser user
 
-hashPassword :: (Member (Exc MCError) r, Member UserAccess r)
-             => BS.ByteString -> Eff r PasswordHash
-hashPassword password = do
-  eHash <- send $ HashPassword password
-  either throwError return eHash
-
-validatePassword :: (Member (Exc MCError) r, Member UserAccess r)
-                 => User -> BS.ByteString -> Eff r ()
+validatePassword :: (MonadError MCError m, MonadUser m) => User -> BS.ByteString
+                 -> m ()
 validatePassword user password = do
   let hash = unPasswordHash $ userPasswordHash user
   unless (BCrypt.validatePassword hash password) $
@@ -159,32 +151,14 @@ validatePassword user password = do
     hash' <- hashPassword password
     void $ editUser (userID user) emptyUser { userPasswordHash = Just hash' }
 
-getUser :: (Member (Exc MCError) r, Member UserAccess r) => UserID -> Eff r User
-getUser uid = do
-  eUser <- send $ GetUser uid
-  either throwError return eUser
-
-getUserByEmail :: (Member (Exc MCError) r, Member UserAccess r)
-               => T.Text -> Eff r User
-getUserByEmail email = do
-  eUser <- send $ GetUserByEmail email
-  either throwError return eUser
-
-editUser :: (Member (Exc MCError) r, Member UserAccess r)
-         => UserID -> User' Maybe -> Eff r User
+editUser :: (MonadError MCError m, MonadUser m) => UserID -> User' Maybe
+         -> m User
 editUser uid fields = do
   validateUser $ fields { userID = Just uid }
-  eUser <- send $ EditUser uid fields
-  either throwError return eUser
+  editUserUnvalidated uid fields
 
-deleteUser :: (Member (Exc MCError) r, Member UserAccess r)
-           => UserID -> Eff r ()
-deleteUser uid = do
-  eRes <- send $ DeleteUser uid
-  either throwError return eRes
-
-validateUser :: (Member (Exc MCError) r, Member UserAccess r)
-             => User' Maybe -> Eff r ()
+-- FIXME: check email and name not empty
+validateUser :: (MonadError MCError m, MonadUser m) => User' Maybe -> m ()
 validateUser user = do
   case userEmail user of
     Nothing -> return ()
@@ -197,87 +171,87 @@ validateUser user = do
             (Just user', Just uid) -> uid /= userID user'
             _ -> False
 
-      when emailTaken $ throwError $ ValidationError "email" "already taken"
+      when emailTaken $
+        throwError $ ValidationError (Just "email") "email already taken"
 
 {-
  - Effect
  -}
 
-data UserAccess a where
-  HashPassword   :: BS.ByteString -> UserAccess (Either MCError PasswordHash)
-  CreateUser     :: User' Write -> UserAccess (Either MCError User)
-  GetUser        :: UserID -> UserAccess (Either MCError User)
-  GetUserByEmail :: T.Text -> UserAccess (Either MCError User)
-  EditUser       :: UserID -> User' Maybe -> UserAccess (Either MCError User)
-  DeleteUser     :: UserID -> UserAccess (Either MCError ())
+class MonadUser m where
+  hashPassword        :: BS.ByteString -> m PasswordHash
+  createUser          :: User' Write -> m User
+  getUser             :: UserID -> m User
+  getUserByEmail      :: T.Text -> m User
+  editUserUnvalidated :: UserID -> User' Maybe -> m User
+  deleteUser          :: UserID -> m ()
 
-runUserAccess :: (MonadBaseControl IO m, SetMember Lift (Lift m) r)
-              => Pool Connection -> Eff (UserAccess ': r) a -> Eff r a
-runUserAccess pool = handle_relay return $ \action rest -> case action of
-  HashPassword password -> do
-    mHash <- lift $ liftBase $
-      BCrypt.hashPasswordUsingPolicy passwordHashingPolicy password
-    rest $ case mHash of
-      Nothing -> Left $ InternalError "hashing failed"
-      Just hash -> Right $ PasswordHash hash
+instance MonadUser DataM where
+  hashPassword        = hashPasswordDataM
+  createUser          = createUserDataM
+  getUser             = getUserDataM
+  getUserByEmail      = getUserByEmailDataM
+  editUserUnvalidated = editUserUnvalidatedDataM
+  deleteUser          = deleteUserDataM
 
-  CreateUser user -> do
-    let user' = User
-          { userID           = fmap pgUserID (userID user)
-          , userEmail        = pgStrictText (userEmail user)
-          , userPasswordHash = pgPasswordHash (userPasswordHash user)
-          }
+hashPasswordDataM :: BS.ByteString -> DataM PasswordHash
+hashPasswordDataM password = do
+  mHash <- liftBase $
+    BCrypt.hashPasswordUsingPolicy passwordHashingPolicy password
+  case mHash of
+    Nothing -> throwError $ InternalError "hashing failed"
+    Just hash -> return $ PasswordHash hash
 
-    res <- lift $ withResource pool $ \conn ->
-      liftBase $ runInsertManyReturning conn userTable [user'] id
+createUserDataM :: User' Write -> DataM User
+createUserDataM user = do
+  res <- withConn $ \conn ->
+    runInsertManyReturning conn userTable [hoistFields user] id
+  case res of
+    user' : _ -> return user'
+    [] -> throwError $ ValidationError (Just "user") "could not create user"
 
-    rest $ case res of
-      user'' : _ -> Right user''
-      [] -> Left $ ValidationError "user" "could not insert"
+getUserDataM :: UserID -> DataM User
+getUserDataM uid = do
+  res <- withConn $ \conn ->
+    runQuery conn $ limit 1 $ userByID <<^ \() -> constant uid
+  case res of
+    user : _ -> return user
+    [] -> throwError $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
 
-  GetUser uid -> do
-    res <- lift $ withResource pool $ \conn ->
-      liftBase $ runQuery conn $ limit 1 $ userByID <<^ \() -> pgUserID uid
+getUserByEmailDataM :: T.Text -> DataM User
+getUserByEmailDataM email = do
+  res <- withConn $ \conn ->
+    runQuery conn $ limit 1 $ userByEmail <<^ \() -> constant email
+  case res of
+    user : _ -> return user
+    [] -> throwError $ ResourceNotFoundError $ "User with email=" ++ show email
 
-    rest $ case res of
-      user : _ -> Right user
-      [] -> Left $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
+editUserUnvalidatedDataM :: UserID -> User' Maybe -> DataM User
+editUserUnvalidatedDataM uid fields = do
+  res <- withConn $ \conn ->
+    runUpdateReturning conn userTable
+      (\user -> User
+         { userID = Nothing
+         , userEmail =
+             maybe (userEmail user) constant (userEmail fields)
+         , userName =
+             maybe (userName user) constant (userName fields)
+         , userPasswordHash =
+             maybe (userPasswordHash user) constant (userPasswordHash fields)
+         , userCreationTime = Nothing
+         })
+      (\user -> userID user .== constant uid)
+      id
 
-  GetUserByEmail email -> do
-    res <- lift $ withResource pool $ \conn ->
-      liftBase $ runQuery conn $
-        limit 1 $ userByEmail <<^ \() -> pgStrictText email
+  case res of
+    user : _ -> return user
+    [] -> throwError $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
 
-    rest $ case res of
-      user : _ -> Right user
-      [] -> Left $ ResourceNotFoundError $ "User with email=" ++ show email
-
-  EditUser uid fields -> do
-    res <- lift $ withResource pool $ \conn ->
-      liftBase $ runUpdateReturning conn userTable
-        (\user -> User
-           { userID = Just $ userID user
-           , userEmail =
-               maybe (userEmail user) pgStrictText (userEmail fields)
-           , userPasswordHash =
-               maybe (userPasswordHash user) pgPasswordHash
-                     (userPasswordHash fields)
-           })
-        (\user -> userID user .== pgUserID uid)
-        id
-
-    rest $ case res of
-      user : _ -> Right user
-      [] -> Left $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
-
-  DeleteUser uid -> do
-    res <- lift $ withResource pool $ \conn ->
-      liftBase $ runDelete conn userTable $ \user ->
-        userID user .== pgUserID uid
-
-    rest $ case res of
-      0 -> Left $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
-      _ -> Right ()
+deleteUserDataM :: UserID -> DataM ()
+deleteUserDataM uid = do
+  now <- getTime
+  void $ withConn $ \conn ->
+    runDelete conn userTable (\user -> userID user .== constant uid)
 
 passwordHashingPolicy :: BCrypt.HashingPolicy
 passwordHashingPolicy = BCrypt.HashingPolicy
