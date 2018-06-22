@@ -1,3 +1,5 @@
+module MammutControl.Server where
+
 import System.IO
 
 import Network.Wai.Handler.Warp
@@ -6,8 +8,8 @@ import MammutControl.API
 import MammutControl.Config
 import MammutControl.Options
 
-main :: IO ()
-main = do
+run :: IO ()
+run = do
   opts   <- getOptions
   config <- readConfigOrDie $ optsConfigPath opts
 

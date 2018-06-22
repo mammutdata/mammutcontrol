@@ -1,8 +1,10 @@
 module MammutControl.API
   ( MammutControlAPI
+  , UnauthenticatedAPI  -- FIXME
   , api
   ) where
 
+import Data.List.NonEmpty
 
 import Servant hiding (throwError)
 import Servant.Auth
@@ -65,9 +67,10 @@ api pool = do
         Authenticated session -> hoistServerWithContext
           (Proxy :: Proxy AuthenticatedAPI) contextProxy
           (runAction pool (Just session)) (authenticatedAPI session)
-        _ -> throwAll $ toServantErr $ AuthenticationError "no session"
+        _ -> throwAll $ toServantErr $
+               AccessDenied False "authentication required" :| []
 
-      app = serveWithContext (Proxy :: Proxy MammutControlAPI) context
-        (unauthenticatedAPI' :<|> authenticatedAPI')
+      app = serveWithContext (Proxy :: Proxy (WithJSONErrors MammutControlAPI))
+        context (unauthenticatedAPI' :<|> authenticatedAPI')
 
   return app

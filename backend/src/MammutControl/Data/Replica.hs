@@ -11,22 +11,14 @@ module MammutControl.Data.Replica
 import           Prelude hiding (null)
 
 import           Control.Arrow
-import           Control.Monad (unless, void, when)
-import           Control.Monad.Base
-import           Control.Monad.Except (MonadError, catchError, throwError)
-import           Control.Monad.Trans.Control
 
 import           Data.Aeson
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
-import           Data.Proxy
 import           Data.Time (UTCTime)
-import qualified Data.ByteString as BS
 import qualified Data.Text as T
-
-import qualified Crypto.BCrypt as BCrypt
 
 import           Opaleye
 
@@ -35,7 +27,6 @@ import           Servant (FromHttpApiData(..))
 import           MammutControl.Data.Group
 import           MammutControl.Data.Types
 import           MammutControl.Data.Wallet
-import           MammutControl.Error
 
 {-
  - Database
@@ -120,9 +111,9 @@ replicaByID = proc uid -> do
  - Logic
  -}
 
-validateReplica :: (MonadError MCError m, MonadReplica m) => Replica' Maybe
-                -> m ()
-validateReplica replica = undefined
+--validateReplica :: (MonadError MCError m, MonadReplica m) => Replica' Maybe
+--                -> m ()
+--validateReplica _ = undefined
 
 {-
  - Effect

@@ -4,9 +4,10 @@ module MammutControl.Actions.Helpers
   , throwError
   ) where
 
+import           Control.Monad (forM_)
 import           Control.Monad.Base
-import           Control.Monad.Except
-import           Control.Monad.Reader
+import           Control.Monad.MultiExcept
+import qualified Control.Monad.Except as E
 
 import           Data.Aeson
 import           Data.Time (addUTCTime)
@@ -25,7 +26,7 @@ import           MammutControl.Error
 
 type Action = AccessControlT DataM
 
-type MonadAction m = ( MonadError MCError m
+type MonadAction m = ( MonadMultiError MCError m
                      , MonadTime m
                      , MonadTransaction m
                      , MonadUser m
@@ -51,17 +52,19 @@ makeSessionToken :: (MonadBase IO m, MonadAction m)
 makeSessionToken jwtSettings user = do
   time <- getTime
   let session = Session { sessionUserID = userID user }
-  eRes <- liftBase $ makeJWT session jwtSettings (Just (addUTCTime 86400 time))
+  eRes <- liftBase $
+    makeJWT session jwtSettings (Just (addUTCTime (7*24*3600) time))
   case eRes of
     Left  err   -> throwError $ AuthenticationError $ show err
     Right token -> return token
 
 runAction :: Pool Connection -> Maybe Session -> Action a -> Handler a
 runAction pool mSession action = do
-  eRes <- liftIO $ flip runDataM pool $ withTransaction $
+  eRes <- liftBase $ flip runDataM pool $ withTransaction $
     runAccessControlT action (sessionUserID <$> mSession)
   case eRes of
-    Left err -> do
-      liftIO $ hPutStrLn stderr $ "Error running action: " ++ show err
-      throwError $ toServantErr err
+    Left errs -> do
+      forM_ errs $ \err ->
+        liftBase $ hPutStrLn stderr $ "Error running action: " ++ show err
+      E.throwError $ toServantErr errs
     Right res -> return res

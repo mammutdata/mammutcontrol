@@ -6,9 +6,8 @@ module MammutControl.AccessControl
   ) where
 
 import Control.Monad.Base
-import Control.Monad.Except
+import Control.Monad.MultiExcept
 import Control.Monad.Reader
-import Control.Monad.Trans
 
 import MammutControl.Data.Types
 import MammutControl.Data.User
@@ -20,8 +19,8 @@ newtype AccessControlT m a
   deriving newtype (Functor, Applicative, Monad, MonadTrans)
 
 deriving newtype instance MonadBase IO m => MonadBase IO (AccessControlT m)
-deriving newtype instance MonadError MCError m
-  => MonadError MCError (AccessControlT m)
+deriving newtype instance MonadMultiError MCError m
+  => MonadMultiError MCError (AccessControlT m)
 deriving newtype instance MonadTime m => MonadTime (AccessControlT m)
 
 instance MonadTransaction m => MonadTransaction (AccessControlT m) where
@@ -32,38 +31,38 @@ instance MonadTransaction m => MonadTransaction (AccessControlT m) where
 runAccessControlT :: AccessControlT m a -> Maybe UserID -> m a
 runAccessControlT action muid = flip runReaderT muid $ unAccessControlT action
 
-deny :: MonadError MCError m => String -> AccessControlT m a
-deny = throwError . AccessDenied
+deny :: MonadMultiError MCError m => Bool -> String -> AccessControlT m a
+deny validSession msg = throwError $ AccessDenied validSession msg
 
-notLoggedInError :: MonadError MCError m => AccessControlT m a
-notLoggedInError = deny "must be logged in"
+notLoggedInError :: MonadMultiError MCError m => AccessControlT m a
+notLoggedInError = deny False "must be logged in"
 
-guardSameUserID :: MonadError MCError m => UserID -> String
+guardSameUserID :: MonadMultiError MCError m => UserID -> String
                 -> AccessControlT m ()
 guardSameUserID uid err = do
   muid <- AccessControlT ask
   case muid of
     Just uid' | uid == uid' -> return ()
-              | otherwise -> deny err
+              | otherwise -> deny True err
     Nothing -> notLoggedInError
 
-guardUserIDIn :: MonadError MCError m => [UserID] -> String
+guardUserIDIn :: MonadMultiError MCError m => [UserID] -> String
               -> AccessControlT m ()
 guardUserIDIn uids err = do
   muid <- AccessControlT ask
   case muid of
     Just uid | uid `elem` uids -> return ()
-             | otherwise -> deny err
+             | otherwise -> deny True err
     Nothing -> notLoggedInError
 
-guardLoggedIn :: MonadError MCError m => AccessControlT m ()
-guardLoggedIn = do
-  muid <- AccessControlT ask
-  case muid of
-    Nothing -> notLoggedInError
-    Just _ -> return ()
+--guardLoggedIn :: MonadMultiError MCError m => AccessControlT m ()
+--guardLoggedIn = do
+--  muid <- AccessControlT ask
+--  case muid of
+--    Nothing -> notLoggedInError
+--    Just _ -> return ()
 
-instance (MonadError MCError m, MonadUser m)
+instance (MonadMultiError MCError m, MonadUser m)
     => MonadUser (AccessControlT m) where
   hashPassword = lift . hashPassword
   createUser   = lift . createUser
@@ -82,7 +81,7 @@ instance (MonadError MCError m, MonadUser m)
     guardSameUserID uid $ "can't delete user with ID " ++ show (unUserID uid)
     lift $ deleteUser uid
 
-instance (MonadError MCError m, MonadWallet m)
+instance (MonadMultiError MCError m, MonadWallet m)
     => MonadWallet (AccessControlT m) where
   createWalletNoOwner = lift . createWalletNoOwner -- needed on user creation
 

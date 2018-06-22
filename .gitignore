@@ -4,3 +4,4 @@ dist-newstyle
 cabal.sandbox.config
 mammut-control.cabal
 config.yml
+.ghc*

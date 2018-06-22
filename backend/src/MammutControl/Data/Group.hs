@@ -8,11 +8,7 @@ module MammutControl.Data.Group
   , createGroup
   ) where
 
-import           Control.Arrow
-import           Control.Monad (unless, void, when)
-import           Control.Monad.Base
-import           Control.Monad.Except
-import           Control.Monad.Trans.Control
+import           Control.Monad.MultiExcept
 
 import           Data.Aeson
 import           Data.Profunctor
@@ -111,40 +107,40 @@ groupMembershipTable =
     , gmGroupID = tableColumn "group_id"
     }
 
-gmByUserID :: QueryArr (Column (ColumnType UserID)) (GroupMembership' Col)
-gmByUserID = proc uid -> do
-  gm <- queryTable groupMembershipTable -< ()
-  restrict -< gmUserID gm .== uid
-  returnA -< gm
+--gmByUserID :: QueryArr (Column (ColumnType UserID)) (GroupMembership' Col)
+--gmByUserID = proc uid -> do
+--  gm <- queryTable groupMembershipTable -< ()
+--  restrict -< gmUserID gm .== uid
+--  returnA -< gm
 
-gmByGroupID :: QueryArr (Column (ColumnType GroupID)) (GroupMembership' Col)
-gmByGroupID = proc gid -> do
-  gm <- queryTable groupMembershipTable -< ()
-  restrict -< gmGroupID gm .== gid
-  returnA -< gm
+--gmByGroupID :: QueryArr (Column (ColumnType GroupID)) (GroupMembership' Col)
+--gmByGroupID = proc gid -> do
+--  gm <- queryTable groupMembershipTable -< ()
+--  restrict -< gmGroupID gm .== gid
+--  returnA -< gm
 
-groupByID :: QueryArr (Column (ColumnType GroupID)) (Group' Col)
-groupByID = proc gid -> do
-  group <- queryTable groupTable -< ()
-  restrict -< groupID group .== gid
-  returnA -< group
+--groupByID :: QueryArr (Column (ColumnType GroupID)) (Group' Col)
+--groupByID = proc gid -> do
+--  group <- queryTable groupTable -< ()
+--  restrict -< groupID group .== gid
+--  returnA -< group
 
-groupsByUserID :: QueryArr (Column (ColumnType UserID)) (Group' Col)
-groupsByUserID = proc uid -> do
-  group <- queryTable groupTable -< ()
-  restrictExists gmByUserID -< uid
-  returnA -< group
+--groupsByUserID :: QueryArr (Column (ColumnType UserID)) (Group' Col)
+--groupsByUserID = proc uid -> do
+--  group <- queryTable groupTable -< ()
+--  restrictExists gmByUserID -< uid
+--  returnA -< group
 
-usersByGroupID :: QueryArr (Column (ColumnType GroupID)) (User' Col)
-usersByGroupID = proc gid -> do
-  gm <- gmByGroupID -< gid
-  userByID -< gmUserID gm
+--usersByGroupID :: QueryArr (Column (ColumnType GroupID)) (User' Col)
+--usersByGroupID = proc gid -> do
+--  gm <- gmByGroupID -< gid
+--  userByID -< gmUserID gm
 
 {-
  - Logic
  -}
 
-createGroup :: (MonadError MCError m, MonadGroup m, MonadTransaction m)
+createGroup :: (MonadMultiError MCError m, MonadGroup m, MonadTransaction m)
             => Group' Write -> UserID -> m Group
 createGroup group uid = withTransaction $ do
   group' <- createGroupNoOwner group
@@ -166,7 +162,7 @@ createGroupNoOwnerDataM group = do
 
   case res of
     wallet' : _ -> return wallet'
-    [] -> throwError $ ValidationError (Just "group") "could not create group"
+    [] -> throwError $ ValidationError Nothing "could not create group"
 
 addUserToGroupDataM :: GroupID -> UserID -> DataM ()
 addUserToGroupDataM gid uid = do

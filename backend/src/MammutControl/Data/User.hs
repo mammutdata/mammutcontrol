@@ -17,15 +17,15 @@ import           Prelude hiding (null)
 import           Control.Arrow
 import           Control.Monad (unless, void, when)
 import           Control.Monad.Base
-import           Control.Monad.Except (MonadError, catchError, throwError)
-import           Control.Monad.Trans.Control
+import           Control.Monad.MultiExcept ( MonadMultiError, catchErrors
+                                           , throwError )
 
 import           Data.Aeson
+import           Data.List.NonEmpty
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
-import           Data.Proxy
 import           Data.Time (UTCTime)
 import qualified Data.ByteString as BS
 import qualified Data.Text as T
@@ -126,7 +126,7 @@ userByEmail = proc email -> do
  - Logic
  -}
 
-createUserFromData :: (MonadError MCError m, MonadTime m, MonadUser m)
+createUserFromData :: (MonadMultiError MCError m, MonadTime m, MonadUser m)
                    => T.Text -> T.Text -> BS.ByteString -> m User
 createUserFromData email name password = do
   hash <- hashPassword password
@@ -138,11 +138,14 @@ createUserFromData email name password = do
         , userPasswordHash = hash
         , userCreationTime = Just now
         }
-  validateUser $ hoistFields user
+  validateUser (hoistFields user)
+    <* (when (BS.null password) $
+          throwError $ ValidationError (Just ("password", CantBeEmpty))
+                                       "password can't be empty")
   createUser user
 
-validatePassword :: (MonadError MCError m, MonadUser m) => User -> BS.ByteString
-                 -> m ()
+validatePassword :: (MonadMultiError MCError m, MonadUser m) => User
+                 -> BS.ByteString -> m ()
 validatePassword user password = do
   let hash = unPasswordHash $ userPasswordHash user
   unless (BCrypt.validatePassword hash password) $
@@ -151,28 +154,35 @@ validatePassword user password = do
     hash' <- hashPassword password
     void $ editUser (userID user) emptyUser { userPasswordHash = Just hash' }
 
-editUser :: (MonadError MCError m, MonadUser m) => UserID -> User' Maybe
+editUser :: (MonadMultiError MCError m, MonadUser m) => UserID -> User' Maybe
          -> m User
 editUser uid fields = do
   validateUser $ fields { userID = Just uid }
   editUserUnvalidated uid fields
 
 -- FIXME: check email and name not empty
-validateUser :: (MonadError MCError m, MonadUser m) => User' Maybe -> m ()
+validateUser :: (MonadMultiError MCError m, MonadUser m) => User' Maybe -> m ()
 validateUser user = do
   case userEmail user of
     Nothing -> return ()
     Just email -> do
       mUser <- fmap Just (getUserByEmail email)
-        `catchError` \(_ :: MCError) -> return Nothing
+        `catchErrors` \(_ :: NonEmpty MCError) -> return Nothing
 
       let emailTaken = case (mUser, userID user) of
             (Just _, Nothing) -> True
             (Just user', Just uid) -> uid /= userID user'
             _ -> False
 
-      when emailTaken $
-        throwError $ ValidationError (Just "email") "email already taken"
+      (when (maybe False T.null (userEmail user)) $
+        throwError $ ValidationError (Just ("email", CantBeEmpty))
+                                     "email can't be empty")
+        *> (when (maybe False T.null (userName user)) $
+             throwError $ ValidationError (Just ("name", CantBeEmpty))
+                                          "name can't be empty")
+        *> (when emailTaken $
+             throwError $ ValidationError (Just ("email", AlreadyTaken))
+                                           "email already taken")
 
 {-
  - Effect
@@ -208,7 +218,7 @@ createUserDataM user = do
     runInsertManyReturning conn userTable [hoistFields user] id
   case res of
     user' : _ -> return user'
-    [] -> throwError $ ValidationError (Just "user") "could not create user"
+    [] -> throwError $ InternalError "could not create user"
 
 getUserDataM :: UserID -> DataM User
 getUserDataM uid = do
@@ -216,7 +226,8 @@ getUserDataM uid = do
     runQuery conn $ limit 1 $ userByID <<^ \() -> constant uid
   case res of
     user : _ -> return user
-    [] -> throwError $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
+    [] -> throwError $ ResourceNotFoundError RTUser $
+            "user #" ++ show (unUserID uid)
 
 getUserByEmailDataM :: T.Text -> DataM User
 getUserByEmailDataM email = do
@@ -224,7 +235,8 @@ getUserByEmailDataM email = do
     runQuery conn $ limit 1 $ userByEmail <<^ \() -> constant email
   case res of
     user : _ -> return user
-    [] -> throwError $ ResourceNotFoundError $ "User with email=" ++ show email
+    [] -> throwError $ ResourceNotFoundError RTUser $
+            "user with email=" ++ show email
 
 editUserUnvalidatedDataM :: UserID -> User' Maybe -> DataM User
 editUserUnvalidatedDataM uid fields = do
@@ -245,11 +257,11 @@ editUserUnvalidatedDataM uid fields = do
 
   case res of
     user : _ -> return user
-    [] -> throwError $ ResourceNotFoundError $ "User #" ++ show (unUserID uid)
+    [] -> throwError $ ResourceNotFoundError RTUser $
+            "user #" ++ show (unUserID uid)
 
 deleteUserDataM :: UserID -> DataM ()
 deleteUserDataM uid = do
-  now <- getTime
   void $ withConn $ \conn ->
     runDelete conn userTable (\user -> userID user .== constant uid)
 

@@ -10,17 +10,13 @@ module MammutControl.Data.Wallet
   ) where
 
 import           Control.Arrow
-import           Control.Monad (unless, void, when)
-import           Control.Monad.Base
-import           Control.Monad.Except (MonadError, catchError, throwError)
-import           Control.Monad.Trans.Control
+import           Control.Monad.MultiExcept (MonadMultiError, throwError)
 
 import           Data.Aeson
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
-import           Data.Proxy
 import           Data.Time
 import qualified Data.Text as T
 
@@ -123,16 +119,17 @@ wmByWalletID = proc wid -> do
   restrict -< wmWalletID wm .== wid
   returnA -< wm
 
-walletByID :: QueryArr (Column (ColumnType WalletID)) (Wallet' Col)
-walletByID = proc wid -> do
-  wallet <- queryTable walletTable -< ()
-  restrict -< walletID wallet .== wid
-  returnA -< wallet
+--walletByID :: QueryArr (Column (ColumnType WalletID)) (Wallet' Col)
+--walletByID = proc wid -> do
+--  wallet <- queryTable walletTable -< ()
+--  restrict -< walletID wallet .== wid
+--  returnA -< wallet
 
 walletsByUserID :: QueryArr (Column (ColumnType UserID)) (Wallet' Col)
 walletsByUserID = proc uid -> do
   wallet <- queryTable walletTable -< ()
-  restrictExists wmByUserID -< uid
+  wm <- wmByUserID -< uid
+  restrict -< walletID wallet .== wmWalletID wm
   returnA -< wallet
 
 usersByWalletID :: QueryArr (Column (ColumnType WalletID)) (User' Col)
@@ -144,7 +141,7 @@ usersByWalletID = proc wid -> do
  - Logic
  -}
 
-createWallet :: (MonadError MCError m, MonadTransaction m, MonadWallet m)
+createWallet :: (MonadMultiError MCError m, MonadTransaction m, MonadWallet m)
              => Wallet' Write -> UserID -> m Wallet
 createWallet wallet uid = withTransaction $ do
   wallet' <- createWalletNoOwner wallet
@@ -174,7 +171,7 @@ createWalletNoOwnerDataM wallet = do
 
   case res of
     wallet' : _ -> return wallet'
-    [] -> throwError $ ValidationError (Just "wallet") "could not create wallet"
+    [] -> throwError $ ValidationError Nothing "could not create wallet"
 
 addUserToWalletDataM :: WalletID -> UserID -> DataM ()
 addUserToWalletDataM wid uid = do

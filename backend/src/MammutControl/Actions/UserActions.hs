@@ -22,7 +22,6 @@ import           Servant
 import           Servant.Auth.Server
 
 import           MammutControl.Actions.Helpers
-import           MammutControl.Data.Types
 import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
 

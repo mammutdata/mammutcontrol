@@ -13,17 +13,15 @@ module MammutControl.Data.Types
 
 import           GHC.Generics
 
-import           Control.Arrow
 import           Control.Exception (mask, onException)
 import           Control.Monad.Base
-import           Control.Monad.Except
+import           Control.Monad.MultiExcept
 import           Control.Monad.Reader
 
 import           Data.Functor.Identity (Identity)
 import           Data.Int (Int64)
+import           Data.List.NonEmpty
 import           Data.Pool (Pool, withResource)
-import           Data.Profunctor.Product
-import           Data.Profunctor.Product.Adaptor
 import           Data.Profunctor.Product.Default
 import           Data.Time (UTCTime, getCurrentTime)
 import qualified Data.Text as T
@@ -52,10 +50,10 @@ type family Field f req a where
   Field Identity _ a    = a
   Field TblCol r a      = TableColumns (Field WriteCol r a) (Field Col r a)
   Field Col _ a         = Column (ColumnType a)
-  Field WriteCol Req a  = Column (ColumnType a)
-  Field WriteCol Opt a  = Maybe (Column (ColumnType a))
-  Field Write Req a     = a
-  Field Write Opt a     = Maybe a
+  Field WriteCol 'Req a = Column (ColumnType a)
+  Field WriteCol 'Opt a = Maybe (Column (ColumnType a))
+  Field Write 'Req a    = a
+  Field Write 'Opt a    = Maybe a
   Field f _ a           = f a
 
 class HoistField a b where
@@ -102,15 +100,15 @@ instance (GHoistFields a c, GHoistFields b d)
 
 newtype DataM a
   = DataM { unDataM :: ReaderT (Either Connection (Pool Connection))
-                               (ExceptT MCError IO) a }
+                               (MultiExceptT MCError IO) a }
   deriving newtype ( Applicative, Functor, Monad, MonadBase IO
-                   , MonadError MCError
+                   , MonadMultiError MCError
                    , MonadReader (Either Connection (Pool Connection))
                    )
 
-runDataM :: DataM a -> Pool Connection -> IO (Either MCError a)
+runDataM :: DataM a -> Pool Connection -> IO (Either (NonEmpty MCError) a)
 runDataM action pool =
-  runExceptT $ flip runReaderT (Right pool) $ unDataM action
+  runMultiExceptT $ flip runReaderT (Right pool) $ unDataM action
 
 withConn :: (Connection -> IO a) -> DataM a
 withConn f = do
@@ -130,13 +128,14 @@ instance MonadTransaction DataM where
       Right _ ->  do
         eRes <- withConn $ \conn -> mask $ \restore -> do
           begin conn
-          r <- restore (runExceptT (runReaderT (unDataM action) (Left conn)))
+          r <- restore (runMultiExceptT
+                        (runReaderT (unDataM action) (Left conn)))
                  `onException` rollback conn
           case r of
             Left  _ -> rollback conn
             Right _ -> commit conn
           return r
-        either throwError return eRes
+        either throwErrors return eRes
 
 class Monad m => MonadTime m where
   getTime :: m UTCTime

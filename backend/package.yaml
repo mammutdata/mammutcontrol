@@ -6,6 +6,12 @@ homepage:     https://www.mammutdata.com
 author:       Thomas Feron <thomas.feron@redspline.com>
 license-file: LICENSE
 
+flags:
+  devel:
+    description: Compile the project for fast reloads
+    manual: True
+    default: False
+
 ghc-options:
   - -Wall
 
@@ -36,6 +42,15 @@ default-extensions:
 
 library:
   source-dirs: src
+
+  when:
+    - condition: flag(devel)
+      exposed-modules:
+        - MammutControl.DevelServer
+      dependencies:
+        - foreign-store
+      ghc-options: -O0
+
   dependencies:
     - aeson
     - bcrypt
@@ -45,26 +60,28 @@ library:
     - opaleye
     - optparse-applicative
     - postgresql-simple
-    - product-profunctors
+    - product-profunctors >=0.9
     - profunctors
     - resource-pool
+    - resourcet
     - servant
     - servant-auth
     - servant-auth-server
-    - servant-server
+    - servant-server >=0.12
     - text
     - time
     - transformers-base
+    - unordered-containers
+    - wai
+    - warp
     - yaml
 
 executables:
   mammut-control:
     source-dirs: .
-    main:        Server.hs
+    main:        Main.hs
     dependencies:
       - mammut-control
-      - optparse-applicative
-      - warp
 
 tests:
   unit-tests:
