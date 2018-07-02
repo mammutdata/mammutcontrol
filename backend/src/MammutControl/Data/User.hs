@@ -1,15 +1,18 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module MammutControl.Data.User
-  ( PasswordHash
+  ( PasswordHash(..)
   , UserID(..)
   , User'(..)
   , User
   , MonadUser(..)
+  , emptyUser
   , userByID
   , createUserFromData
   , validatePassword
+  , validateUser
   , editUser
+  , passwordHashingPolicy
   ) where
 
 import           Prelude hiding (null)
@@ -22,6 +25,7 @@ import           Control.Monad.MultiExcept ( MonadMultiError, catchErrors
 
 import           Data.Aeson
 import           Data.List.NonEmpty
+import           Data.Foldable (sequenceA_)
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
@@ -43,7 +47,9 @@ import           MammutControl.Error
  - Database
  -}
 
-newtype PasswordHash = PasswordHash { unPasswordHash :: BS.ByteString }
+newtype PasswordHash
+  = PasswordHash { unPasswordHash :: BS.ByteString }
+  deriving (Eq, Show)
 
 type instance ColumnType PasswordHash = PGBytea
 
@@ -160,29 +166,30 @@ editUser uid fields = do
   validateUser $ fields { userID = Just uid }
   editUserUnvalidated uid fields
 
--- FIXME: check email and name not empty
 validateUser :: (MonadMultiError MCError m, MonadUser m) => User' Maybe -> m ()
 validateUser user = do
-  case userEmail user of
-    Nothing -> return ()
+  emailTaken <- case userEmail user of
+    Nothing -> return False
     Just email -> do
       mUser <- fmap Just (getUserByEmail email)
         `catchErrors` \(_ :: NonEmpty MCError) -> return Nothing
 
-      let emailTaken = case (mUser, userID user) of
-            (Just _, Nothing) -> True
-            (Just user', Just uid) -> uid /= userID user'
-            _ -> False
+      return $ case (mUser, userID user) of
+        (Just _, Nothing) -> True
+        (Just user', Just uid) -> uid /= userID user'
+        _ -> False
 
-      (when (maybe False T.null (userEmail user)) $
+  sequenceA_
+    [ when (maybe False T.null (userEmail user)) $
         throwError $ ValidationError (Just ("email", CantBeEmpty))
-                                     "email can't be empty")
-        *> (when (maybe False T.null (userName user)) $
-             throwError $ ValidationError (Just ("name", CantBeEmpty))
-                                          "name can't be empty")
-        *> (when emailTaken $
-             throwError $ ValidationError (Just ("email", AlreadyTaken))
-                                           "email already taken")
+                                     "email can't be empty"
+    , when (maybe False T.null (userName user)) $
+       throwError $ ValidationError (Just ("name", CantBeEmpty))
+                                    "name can't be empty"
+    , when emailTaken $
+       throwError $ ValidationError (Just ("email", AlreadyTaken))
+                                    "email already taken"
+    ]
 
 {-
  - Effect

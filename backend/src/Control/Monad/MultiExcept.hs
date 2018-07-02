@@ -10,6 +10,7 @@ module Control.Monad.MultiExcept
 
 import Control.Monad.Base
 import Control.Monad.Reader
+import Control.Monad.State
 
 import Data.Semigroup
 import Data.List.NonEmpty
@@ -42,6 +43,12 @@ instance Monad m => Monad (MultiExceptT e m) where
 instance MonadTrans (MultiExceptT e) where
   lift = MultiExceptT . fmap Right
 
+instance MonadBase b m => MonadBase b (MultiExceptT e m) where
+  liftBase = liftBaseDefault
+
+instance MonadState s m => MonadState s (MultiExceptT e m) where
+  state = lift . state
+
 class Monad m => MonadMultiError e m where
   throwError :: e -> m a
   catchErrors :: m a -> (NonEmpty e -> m a) -> m a
@@ -59,8 +66,14 @@ instance (Monad m, MonadMultiError e m) => MonadMultiError e (ReaderT r m) where
     r <- ask
     lift $ runReaderT action r `catchErrors` (flip runReaderT r . handler)
 
-instance MonadBase b m => MonadBase b (MultiExceptT e m) where
-  liftBase = liftBaseDefault
+instance (Monad m, MonadMultiError e m) => MonadMultiError e (StateT s m) where
+  throwError = lift . throwError
+  catchErrors action handler = do
+    s <- get
+    (x, s') <- lift $
+      runStateT action s `catchErrors` (flip runStateT s . handler)
+    put s'
+    return x
 
 throwErrors :: (Applicative m, MonadMultiError e m) => NonEmpty e -> m a
 throwErrors (e :| es) = case es of

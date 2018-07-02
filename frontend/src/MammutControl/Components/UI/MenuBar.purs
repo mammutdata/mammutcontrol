@@ -80,7 +80,7 @@ render st =
               [HH.a [HP.href "#/signup"] [HH.text "Sign up"]]
           ]
 
-      navBar = HH.nav_
+      navBar = HH.nav [HP.class_ (HH.ClassName "teal")]
         [ HH.div [HP.classes [HH.ClassName "nav-wrapper", MHH.container]]
             [ HH.a
                 [HP.href "#/", HP.class_ (HH.ClassName "brand-logo")]

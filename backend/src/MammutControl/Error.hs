@@ -22,7 +22,7 @@ data ResourceType
   = RTUser
   | RTGroup
   | RTReplica
-  deriving Show
+  deriving (Eq, Show)
 
 resourceTypeToText :: ResourceType -> T.Text
 resourceTypeToText = \case
@@ -33,7 +33,7 @@ resourceTypeToText = \case
 data ValidationType
   = CantBeEmpty
   | AlreadyTaken
-  deriving Show
+  deriving (Eq, Show)
 
 validationTypeToText :: ValidationType -> T.Text
 validationTypeToText = \case
@@ -46,7 +46,7 @@ data MCError
   | AuthenticationError String
   | InternalError String
   | AccessDenied Bool String
-  deriving Show
+  deriving (Eq, Show)
 
 toServantErr :: NonEmpty MCError -> ServantErr
 toServantErr (e :| []) = uncurry mkErr $ fmap SingleError $ toServantErr' e

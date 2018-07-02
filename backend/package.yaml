@@ -89,8 +89,13 @@ tests:
     main:        Suite.hs
     ghc-options: -threaded
     dependencies:
+      - bcrypt
+      - bytestring
       - hedgehog
       - mammut-control
+      - mtl
+      - servant-server
       - tasty
       - tasty-hedgehog
-      - tasty-hunit
+      - text
+      - time
