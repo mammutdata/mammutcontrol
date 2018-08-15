@@ -25,7 +25,8 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-import MammutControl.API as API
+import MammutControl.API.Helpers as API
+import MammutControl.API.UserAPI as API
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
@@ -60,7 +61,7 @@ render :: forall m. MonadAff m => State
        -> H.ParentHTML Query MenuBar.Query Unit m
 render st =
   HH.div_
-    [ HH.slot unit MenuBar.component { route: Signin, loggedIn: false } absurd
+    [ HH.slot unit MenuBar.component { route: Signin } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
         [MHH.centeredDiv [renderForm st]]
     ]
@@ -74,30 +75,32 @@ renderForm st =
         Nothing -> HH.text ""
         Just errHTML -> MHH.errorCard [errHTML]
 
-    , MHH.inputWrapper
-        [ MHH.input Nothing
-            [ HP.type_ HP.InputText
-            , HP.value st.email
-            , HP.name "email"
-            , HP.autofocus true
-            , HE.onValueInput (HE.input ChangeEmail)
+    , MHH.box
+        [ MHH.inputWrapper
+            [ MHH.input Nothing
+                [ HP.type_ HP.InputText
+                , HP.value st.email
+                , HP.name "email"
+                , HP.autofocus true
+                , HE.onValueInput (HE.input ChangeEmail)
+                ]
+            , HH.label [ HP.for "email" ] [ HH.text "Email" ]
             ]
-        , HH.label [ HP.for "email" ] [ HH.text "Email" ]
-        ]
 
-    , MHH.inputWrapper
-        [ MHH.input Nothing
-            [ HP.type_ HP.InputPassword
-            , HP.value st.password
-            , HP.name "password"
-            , HE.onValueInput (HE.input ChangePassword)
+        , MHH.inputWrapper
+            [ MHH.input Nothing
+                [ HP.type_ HP.InputPassword
+                , HP.value st.password
+                , HP.name "password"
+                , HE.onValueInput (HE.input ChangePassword)
+                ]
+            , HH.label [ HP.for "password" ] [ HH.text "Password" ]
             ]
-        , HH.label [ HP.for "password" ] [ HH.text "Password" ]
-        ]
 
-    , MHH.submitButton []
-        [ HH.text "Sign in" ]
-    ]
+        , MHH.submitButton []
+            [ HH.text "Sign in" ]
+        ]
+      ]
 
 eval :: forall m. MonadAff m
      => Query ~> H.ParentDSL State Query MenuBar.Query Unit Void m

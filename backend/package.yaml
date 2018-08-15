@@ -17,6 +17,14 @@ ghc-options:
 
 dependencies:
   - base >=4.9 && <5
+  - bcrypt
+  - bytestring
+  - mtl
+  - servant-auth-server
+  - servant-server >=0.12
+  - text
+  - time
+  - transformers-base
 
 default-extensions:
   - Arrows
@@ -53,10 +61,7 @@ library:
 
   dependencies:
     - aeson
-    - bcrypt
-    - bytestring
     - monad-control
-    - mtl
     - opaleye
     - optparse-applicative
     - postgresql-simple
@@ -66,11 +71,6 @@ library:
     - resourcet
     - servant
     - servant-auth
-    - servant-auth-server
-    - servant-server >=0.12
-    - text
-    - time
-    - transformers-base
     - unordered-containers
     - wai
     - warp
@@ -89,13 +89,8 @@ tests:
     main:        Suite.hs
     ghc-options: -threaded
     dependencies:
-      - bcrypt
-      - bytestring
       - hedgehog
+      - jose
       - mammut-control
-      - mtl
-      - servant-server
       - tasty
       - tasty-hedgehog
-      - text
-      - time

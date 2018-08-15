@@ -24,10 +24,10 @@ instance FromJSON WalletData where
 createWalletAction :: MonadAction m => Session -> WalletData -> m Wallet
 createWalletAction session (WalletData name mDescription) = do
   let wallet = Wallet
-        { walletID           = Nothing
+        { walletID           = ()
         , walletName         = name
-        , walletDescription  = Just mDescription
-        , walletCredits      = Nothing
-        , walletCreationTime = Nothing
+        , walletDescription  = mDescription
+        , walletCredits      = ()
+        , walletCreationTime = ()
         }
   createWallet wallet (sessionUserID session)

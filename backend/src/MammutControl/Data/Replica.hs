@@ -45,25 +45,29 @@ instance Default Constant ReplicaID (Column PGInt8) where
   def = lmap unReplicaID def
 
 data Replica' f = Replica
-  { replicaID           :: Field f 'Opt ReplicaID
-  , replicaGroupID      :: Field f 'Req GroupID
-  , replicaName         :: Field f 'Req T.Text
-  , replicaDescription  :: Field f 'Opt (Maybe T.Text)
-  , replicaWalletID     :: Field f 'Opt (Maybe WalletID)
-  , replicaCreationTime :: Field f 'Opt UTCTime
+  { replicaID           :: Field f 'ReadOnly ReplicaID
+  , replicaGroupID      :: Field f 'Required GroupID
+  , replicaName         :: Field f 'Required T.Text
+  , replicaDescription  :: Field f 'Optional (Maybe T.Text)
+  , replicaWalletID     :: Field f 'Optional (Maybe WalletID)
+  , replicaCreationTime :: Field f 'ReadOnly UTCTime
   } deriving Generic
 
 type Replica = Replica' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Opt ReplicaID) (Field g 'Opt ReplicaID)
-                  , Default p (Field f 'Req GroupID) (Field g 'Req GroupID)
-                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
-                  , Default p (Field f 'Opt (Maybe T.Text))
-                              (Field g 'Opt (Maybe T.Text))
-                  , Default p (Field f 'Opt (Maybe WalletID))
-                              (Field g 'Opt (Maybe WalletID))
-                  , Default p (Field f 'Opt UTCTime) (Field g 'Opt UTCTime)
+                  , Default p (Field f 'ReadOnly ReplicaID)
+                              (Field g 'ReadOnly ReplicaID)
+                  , Default p (Field f 'Required GroupID)
+                              (Field g 'Required GroupID)
+                  , Default p (Field f 'Required T.Text)
+                              (Field g 'Required T.Text)
+                  , Default p (Field f 'Optional (Maybe T.Text))
+                              (Field g 'Optional (Maybe T.Text))
+                  , Default p (Field f 'Optional (Maybe WalletID))
+                              (Field g 'Optional (Maybe WalletID))
+                  , Default p (Field f 'ReadOnly UTCTime)
+                              (Field g 'ReadOnly UTCTime)
                   ) => Default p (Replica' f) (Replica' g)
 
 instance ToJSON Replica where

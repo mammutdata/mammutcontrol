@@ -53,7 +53,8 @@ createUserFromDataTests = testGroup "createUserFromData"
 
 validatePasswordTests :: TestTree
 validatePasswordTests = testGroup "validatePassword"
-  [ testProperty "returns () when the password is correct" $ property $ do
+  [ testProperty "returns () when the password is\
+                 \ correct" $ withTests 10 $ property $ do
       pwd <- forAll passwordGen
       eRes <- runStubbedDataT_ $ do
         user <- createUserFromData "bob@email.tld" "Bob" pwd
@@ -61,7 +62,7 @@ validatePasswordTests = testGroup "validatePassword"
       eRes === Right ()
 
   , testProperty "throws an authentication error when the\
-                 \ password is wrong" $ property $ do
+                 \ password is wrong" $ withTests 10 $ property $ do
       pwd  <- forAll passwordGen
       pwd' <- forAll passwordGen
       guard $ pwd /= pwd'
@@ -75,17 +76,17 @@ validatePasswordTests = testGroup "validatePassword"
         _ -> annotateShow eRes >> failure
 
   , testProperty "rehashes the password if the policy has\
-                 \ changed" $ property $ do
+                 \ changed" $ withTests 10 $ property $ do
       pwd <- forAll passwordGen
       let unsecureHash =
             hashPasswordForTests (passwordHashingCostForTests - 1) pwd
       eRes <- runStubbedDataT_ $ do
         user <- createUser User
-          { userID           = Nothing
+          { userID           = ()
           , userName         = "Alice"
           , userEmail        = "alice@email.tld"
           , userPasswordHash = unsecureHash
-          , userCreationTime = Nothing
+          , userCreationTime = ()
           }
         stub $ EditUser $ \_ fields -> do
           secureHash <- hashPassword pwd
@@ -139,7 +140,7 @@ editUserTests = testGroup "editUser"
   , testProperty "edits a user" $ once $ property $ do
       eUser <- runFakeDataT_ $ do
         user <- createUserFromData "bob@email.tld" "Bob" "secret"
-        editUser (userID user) $ emptyUser
+        _ <- editUser (userID user) $ emptyUser
           { userName         = Just "Alice"
           , userEmail        = Just "alice@email.tld"
           , userPasswordHash = Just (PasswordHash "other-secret-hash")

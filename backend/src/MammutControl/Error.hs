@@ -1,6 +1,7 @@
 module MammutControl.Error
   ( ResourceType(..)
   , ValidationType(..)
+  , Constraint(..)
   , MCError(..)
   , toServantErr
   , WithJSONErrors(..)
@@ -22,6 +23,7 @@ data ResourceType
   = RTUser
   | RTGroup
   | RTReplica
+  | RTWallet
   deriving (Eq, Show)
 
 resourceTypeToText :: ResourceType -> T.Text
@@ -29,6 +31,7 @@ resourceTypeToText = \case
   RTUser    -> "user"
   RTGroup   -> "group"
   RTReplica -> "replica"
+  RTWallet  -> "wallet"
 
 data ValidationType
   = CantBeEmpty
@@ -40,12 +43,26 @@ validationTypeToText = \case
   CantBeEmpty  -> "cant_be_empty"
   AlreadyTaken -> "already_taken"
 
+data Constraint
+  = ConstraintGroupHasAtLeastOneMember
+  deriving (Eq, Show)
+
+humanReadableConstraint :: Constraint -> T.Text
+humanReadableConstraint = \case
+  ConstraintGroupHasAtLeastOneMember ->
+    "a group should always have at least one member"
+
+constraintToText :: Constraint -> T.Text
+constraintToText = \case
+  ConstraintGroupHasAtLeastOneMember -> "constraint_group_has_member"
+
 data MCError
   = ResourceNotFoundError ResourceType String
   | ValidationError (Maybe (T.Text, ValidationType)) String
   | AuthenticationError String
   | InternalError String
   | AccessDenied Bool String
+  | ConstraintCheckError Constraint
   deriving (Eq, Show)
 
 toServantErr :: NonEmpty MCError -> ServantErr
@@ -75,9 +92,12 @@ toServantErr' = \case
     InternalError _ ->
       (err500, SingleJSONError "internal error" Nothing (Just "internal_error"))
     AccessDenied validToken msg ->
-      let typ | validToken = "access_denied"
-              | otherwise  = "invalid_token"
-      in (err401, SingleJSONError (T.pack msg) Nothing (Just typ))
+      let (code, typ) | validToken = (err403, "access_denied")
+                      | otherwise  = (err401, "invalid_token")
+      in (code, SingleJSONError (T.pack msg) Nothing (Just typ))
+    ConstraintCheckError constraint ->
+      (err400, SingleJSONError (humanReadableConstraint constraint) Nothing
+                               (Just (constraintToText constraint)))
 
 mkErr :: ServantErr -> JSONError -> ServantErr
 mkErr base err = base

@@ -44,17 +44,25 @@ type instance ColumnType Int       = PGInt4
 type instance ColumnType UTCTime   = PGTimestamptz
 type instance ColumnType (Maybe a) = Nullable (ColumnType a)
 
-data ReqOpt = Req | Opt
+data FieldType = Required | Optional | ReadOnly
 
 type family Field f req a where
-  Field Identity _ a    = a
-  Field TblCol r a      = TableColumns (Field WriteCol r a) (Field Col r a)
-  Field Col _ a         = Column (ColumnType a)
-  Field WriteCol 'Req a = Column (ColumnType a)
-  Field WriteCol 'Opt a = Maybe (Column (ColumnType a))
-  Field Write 'Req a    = a
-  Field Write 'Opt a    = Maybe a
-  Field f _ a           = f a
+  Field Identity _ a = a
+  Field TblCol r a   = TableColumns (Field WriteCol r a) (Field Col r a)
+  Field Col _ a      = Column (ColumnType a)
+
+  Field WriteCol 'Required a         = Column (ColumnType a)
+  Field WriteCol 'Optional (Maybe a) = Column (ColumnType (Maybe a))
+  Field WriteCol 'Optional a         = Maybe (Column (ColumnType a))
+  Field WriteCol 'ReadOnly a         = Maybe (Column (ColumnType a))
+
+  -- The following makes it easier to use at the price of forcing the default
+  -- value to be NULL which probably makes sense in most cases anyway.
+  Field Write 'Optional (Maybe a) = Maybe a
+  Field Write 'Optional a         = Maybe a
+  Field Write 'Required a         = a
+  Field Write 'ReadOnly a         = ()
+  Field f _ a                     = f a
 
 class HoistField a b where
   hoistField :: a -> b
@@ -65,10 +73,20 @@ instance {-# OVERLAPPABLE #-} a ~ b => HoistField a b where
 instance HoistField a (Maybe a) where
   hoistField = Just
 
+instance HoistField () (Maybe a) where
+  hoistField () = Nothing
+
 instance HoistField a b => HoistField (Maybe a) (Maybe b) where
   hoistField = fmap hoistField
 
-instance Default Constant a (Column b) => HoistField a (Column b) where
+instance HoistField a (Column b)
+    => HoistField (Maybe a) (Column (Nullable b)) where
+  hoistField = \case
+    Nothing -> Opaleye.null
+    Just x -> toNullable $ hoistField x
+
+instance {-# OVERLAPPABLE #-} Default Constant a (Column b)
+    => HoistField a (Column b) where
   hoistField = constant
 
 hoistFields :: forall t (f :: k) (g :: k).

@@ -1,5 +1,7 @@
 module MammutControl.Routes
   ( Route(..)
+  , Section(..)
+  , sectionFromRoute
   , routes
   ) where
 
@@ -28,17 +30,27 @@ data Route
   = Home
   | Signup
   | Signin
+  | Groups
+  | GroupsNew
 
--- FIXME: How to derive this?
-instance showRoute :: Show Route where
-  show = case _ of
-    Home   -> "Home"
-    Signup -> "Signup"
-    Signin -> "Signin"
+data Section
+  = GroupSection
+
+sectionFromRoute :: Route -> Maybe Section
+sectionFromRoute = case _ of
+  Home -> Nothing
+  Signup -> Nothing
+  Signin -> Nothing
+  Groups -> Just GroupSection
+  GroupsNew -> Just GroupSection
 
 routes :: Match Route
 routes = root *> oneOf
   [ Signup <$ lit "signup"
   , Signin <$ lit "signin"
+  -- Groups
+  , GroupsNew <$ lit "groups" <* lit "new"
+  , Groups <$ lit "groups"
+  -- /
   , pure Home
   ] <* end

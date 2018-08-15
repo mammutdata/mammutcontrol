@@ -1,6 +1,4 @@
-module MammutControl.API where
-
-import Debug.Trace
+module MammutControl.API.Helpers where
 
 import Prelude
 
@@ -23,11 +21,28 @@ import Foreign.Object as Obj
 import Network.HTTP.Affjax
 import Network.HTTP.Affjax.Request as RQ
 import Network.HTTP.Affjax.Response as RS
+import Network.HTTP.RequestHeader (RequestHeader(..))
 import Network.HTTP.StatusCode
+
+import Web.HTML (window)
+import Web.HTML.Location (setHref)
+import Web.HTML.Window (location)
 
 import Halogen.HTML as HH
 
 import MammutControl.Session
+
+get' :: forall a. RS.Response a -> URL -> Affjax a
+get' response url = do
+  mToken <- liftEffect getToken
+  let request = defaultRequest { url = url }
+      request' = case mToken of
+        Nothing -> request
+        Just token ->
+          let authorizationHeader =
+                RequestHeader "Authorization" ("Bearer " <> token)
+          in request { headers = authorizationHeader :  request.headers }
+  affjax response request'
 
 data APIErrorCode
   -- access control errors
@@ -65,16 +80,17 @@ humanReadableError :: APIErrorCode -> String
 humanReadableError = case _ of
   AuthenticationError ->
     "The authentication failed. Please check your credentials."
-  InvalidToken -> "The token is invalid or has expired. Please sign in again."
-  AccessDenied -> "Access denied."
-  ValidationError -> "The request is not valid."
-  CantBeEmpty -> "Can't be empty."
-  AlreadyTaken -> "Already taken."
-  UserNotFound -> "The user could not be found."
-  GroupNotFound -> "The group could not be found."
-  ReplicaNotFound -> "The replica could not be found."
-  InternalError -> "An internal error occured."
-  MultipleErrors -> "Multiple errors occured."
+  InvalidToken        ->
+    "The token is invalid or has expired. Please sign in again."
+  AccessDenied        -> "Access denied."
+  ValidationError     -> "The request is not valid."
+  CantBeEmpty         -> "Can't be empty."
+  AlreadyTaken        -> "Already taken."
+  UserNotFound        -> "The user could not be found."
+  GroupNotFound       -> "The group could not be found."
+  ReplicaNotFound     -> "The replica could not be found."
+  InternalError       -> "An internal error occured."
+  MultipleErrors      -> "Multiple errors occured."
 
 humanReadableErrorList :: forall p i. Array String -> HH.HTML p i
 humanReadableErrorList [err] = HH.text err
@@ -135,7 +151,9 @@ processResponse response action = do
     then do
       let err = parseAPIErrorJSON response.status response.response
       case err of
-        APIError _ _ _ (Just InvalidToken) _ -> liftEffect clearToken
+        APIError _ _ _ (Just InvalidToken) _ -> liftEffect $ do
+          clearToken
+          setHref "/" =<< location =<< window
         _ -> pure unit
       liftEffect $ logError err
       pure $ Left err
@@ -156,44 +174,3 @@ logError = case _ of
     log $ "API error (" <> show status <> "): multiple errors"
     for_ errs logError
   OtherError str -> log str
-
-signin :: { email :: String, password :: String }
-       -> Aff (Either APIError Unit)
-signin credentials = do
-  let req = RQ.json $ A.fromObject $ Obj.fromFoldable
-        [ Tuple "email"    $ A.fromString credentials.email
-        , Tuple "password" $ A.fromString credentials.password
-        ]
-  response <- post RS.json "/api/users/signin" req
-  processResponse response $ case response.status of
-    StatusCode 200 -> liftEffect $ readSessionInfo response.response
-    _ -> pure $ Left "Unknown error."
-
-signup :: { name :: String, email :: String, password :: String }
-       -> Aff (Either APIError Unit)
-signup credentials = do
-  let req = RQ.json $ A.fromObject $ Obj.fromFoldable
-        [ Tuple "name"     $ A.fromString credentials.name
-        , Tuple "email"    $ A.fromString credentials.email
-        , Tuple "password" $ A.fromString credentials.password
-        ]
-  response <- post RS.json "/api/users" req
-  processResponse response $ case response.status of
-    StatusCode 201 -> liftEffect $ readSessionInfo response.response
-    _ -> pure $ Left "Unknown error."
-
-readSessionInfo :: A.Json -> Effect (Either String Unit)
-readSessionInfo json = case parseSessionInfo json of
-    Left  err   -> pure $ Left err
-    Right token -> do
-      setToken token
-      pure $ Right unit
-
-  where
-    parseSessionInfo :: A.Json -> Either String String
-    parseSessionInfo =
-      A.caseJsonObject (Left "Expected object for session info") \obj ->
-        case Obj.lookup "token" obj of
-          Nothing -> Left "No key token"
-          Just tk ->
-            A.caseJsonString (Left "Expected string for token") Right tk

@@ -10,7 +10,7 @@ ghcid-devel: ## Run the server in fast development mode. See MammutControl.Devel
 ghcid-test: ## Run the tests repeatedly after each change.
 	ghcid \
 	  --command "hpack; cabal new-repl unit-tests" \
-	  --restart=package.yaml --reload=src -W \
-	  --test "Main.main"
+	  --restart=package.yaml --restart=src -W \
+	  --test "Main.ghcidMain"
 
 .PHONY: ghcid-devel help

@@ -9,12 +9,11 @@ import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), isJust)
 
-import Web.DOM.NonElementParentNode (getElementById)
 import Web.HTML (window)
-import Web.HTML.HTMLDocument (toNonElementParentNode)
-import Web.HTML.Window (document)
+import Web.HTML.Location (setHref)
+import Web.HTML.Window (location)
 
 import Halogen as H
 import Halogen.Aff as HA
@@ -24,6 +23,7 @@ import Halogen.HTML.Properties as HP
 
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
+import MammutControl.Session (getToken, clearToken)
 
 foreign import data SideNavInstance :: Type
 foreign import bindSideNav   :: Effect SideNavInstance
@@ -38,19 +38,18 @@ type State =
 initialState :: Input -> State
 initialState input =
   { route:    input.route
-  , loggedIn: input.loggedIn
+  , loggedIn: false
   , sidenav:  Nothing
   }
 
-type Input =
-  { route    :: Route
-  , loggedIn :: Boolean
-  }
+type Input = { route :: Route }
 
 data Query a
   = InputChanged Input a
   | BindSideNav a
   | UnbindSideNav a
+  | Init a
+  | Signout a
 
 component :: forall m. MonadAff m => H.Component HH.HTML Query Input Void m
 component = H.lifecycleComponent
@@ -58,7 +57,7 @@ component = H.lifecycleComponent
   , render
   , eval
   , receiver: HE.input InputChanged
-  , initializer: Just (BindSideNav unit)
+  , initializer: Just (Init unit)
   , finalizer: Just (UnbindSideNav unit)
   }
 
@@ -66,7 +65,14 @@ render :: State -> H.ComponentHTML Query
 render st =
   let links
         | st.loggedIn =
-          []
+          [ HH.li
+              (case sectionFromRoute st.route of
+                 Just GroupSection -> [HP.class_ (HH.ClassName "active")]
+                 _ -> [])
+              [HH.a [HP.href "#/groups"] [HH.text "Groups"]]
+          , HH.li_ [HH.a [HP.href "#", HE.onClick (HE.input_ Signout)]
+                         [HH.text "Sign out"]]
+          ]
         | otherwise =
           [ HH.li
               (case st.route of
@@ -112,7 +118,7 @@ render st =
 eval :: forall m. MonadAff m => Query ~> H.ComponentDSL State Query Void m
 eval = case _ of
   InputChanged input next -> do
-    H.modify_ (_ { route = input.route, loggedIn = input.loggedIn })
+    H.modify_ (_ { route = input.route })
     pure next
 
   BindSideNav next -> do
@@ -125,4 +131,16 @@ eval = case _ of
     case st.sidenav of
       Just inst -> liftEffect $ unbindSideNav inst
       Nothing -> pure unit
+    pure next
+
+  Init next -> do
+    eval $ BindSideNav unit
+    mToken <- liftEffect getToken
+    H.modify_ (_ { loggedIn = isJust mToken })
+    pure next
+
+  Signout next -> do
+    liftEffect do
+      clearToken
+      setHref "/" =<< location =<< window
     pure next

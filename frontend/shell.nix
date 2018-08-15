@@ -2,9 +2,11 @@ with import <nixpkgs> {};
 stdenv.mkDerivation {
   name = "mammut-control";
   buildInputs = [
-    #purescript
-    nodejs
+    haskellPackages.purescript
+    nodejs-10_x
     nodePackages.bower
+    nodePackages.webpack
+    sass
     zlib
   ];
   shellHook = ''

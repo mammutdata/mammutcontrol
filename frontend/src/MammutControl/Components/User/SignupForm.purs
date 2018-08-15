@@ -22,7 +22,8 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-import MammutControl.API as API
+import MammutControl.API.Helpers as API
+import MammutControl.API.UserAPI as API
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
@@ -69,7 +70,7 @@ render :: forall m. MonadAff m => State
        -> H.ParentHTML Query MenuBar.Query Unit m
 render st =
   HH.div_
-    [ HH.slot unit MenuBar.component { route: Signup, loggedIn: false } absurd
+    [ HH.slot unit MenuBar.component { route: Signup } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
         [MHH.centeredDiv [renderForm st]]
     ]
@@ -83,56 +84,58 @@ renderForm st =
         Nothing -> HH.text ""
         Just errHTML -> MHH.errorCard [errHTML]
 
-    , MHH.inputWrapper
-        [ MHH.input st.nameError
-            [ HP.type_ HP.InputText
-            , HP.value st.name
-            , HP.name "name"
-            , HP.autofocus true
-            , HE.onValueInput (HE.input ChangeName)
-            ]
-        , HH.label [ HP.for "name" ] [ HH.text "Full name" ]
-        , MHH.inputHelper "" st.nameError
-        ]
-
-    , MHH.inputWrapper
-        [ MHH.input st.emailError
-            [ HP.type_ HP.InputEmail
-            , HP.value st.email
-            , HP.name "email"
-            , HE.onValueInput (HE.input ChangeEmail)
-            ]
-        , HH.label [ HP.for "email" ] [ HH.text "Email" ]
-        , MHH.inputHelper "" st.emailError
-        ]
-
-    , MHH.row_
-        [ MHH.inputField6
-           [ MHH.inputNoValidate st.password st.passwordError
-               [ HP.type_ HP.InputPassword
-               , HP.value st.password
-               , HP.name "password"
-               , HE.onValueInput (HE.input ChangePassword)
-               ]
-           , HH.label [ HP.for "password" ] [ HH.text "Password" ]
-           , MHH.inputHelper "" st.passwordError
-           ]
-
-        , MHH.inputField6
-            [ MHH.inputNoValidate st.passwordConfirmation Nothing
-                [ HP.type_ HP.InputPassword
-                , HP.value st.passwordConfirmation
-                , HP.name "password_confirmation"
-                , HE.onValueInput (HE.input ChangePasswordConfirmation)
+    , MHH.box
+        [ MHH.inputWrapper
+            [ MHH.input st.nameError
+                [ HP.type_ HP.InputText
+                , HP.value st.name
+                , HP.name "name"
+                , HP.autofocus true
+                , HE.onValueInput (HE.input ChangeName)
                 ]
-            , HH.label
-                [ HP.for "password_confirmation" ]
-                [ HH.text "Password confirmation" ]
+            , HH.label [ HP.for "name" ] [ HH.text "Full name" ]
+            , MHH.inputHelper "" st.nameError
             ]
-        ]
 
-    , MHH.submitButton []
-        [ HH.text "Sign up" ]
+        , MHH.inputWrapper
+            [ MHH.input st.emailError
+                [ HP.type_ HP.InputEmail
+                , HP.value st.email
+                , HP.name "email"
+                , HE.onValueInput (HE.input ChangeEmail)
+                ]
+            , HH.label [ HP.for "email" ] [ HH.text "Email" ]
+            , MHH.inputHelper "" st.emailError
+            ]
+
+        , MHH.row_
+            [ MHH.inputField6
+               [ MHH.inputNoValidate st.password st.passwordError
+                   [ HP.type_ HP.InputPassword
+                   , HP.value st.password
+                   , HP.name "password"
+                   , HE.onValueInput (HE.input ChangePassword)
+                   ]
+               , HH.label [ HP.for "password" ] [ HH.text "Password" ]
+               , MHH.inputHelper "" st.passwordError
+               ]
+
+            , MHH.inputField6
+                [ MHH.inputNoValidate st.passwordConfirmation Nothing
+                    [ HP.type_ HP.InputPassword
+                    , HP.value st.passwordConfirmation
+                    , HP.name "password_confirmation"
+                    , HE.onValueInput (HE.input ChangePasswordConfirmation)
+                    ]
+                , HH.label
+                    [ HP.for "password_confirmation" ]
+                    [ HH.text "Password confirmation" ]
+                ]
+            ]
+
+        , MHH.submitButton []
+            [ HH.text "Sign up" ]
+        ]
     ]
 
 eval :: forall m. MonadAff m

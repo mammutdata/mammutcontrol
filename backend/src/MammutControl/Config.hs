@@ -36,9 +36,9 @@ instance FromJSON Config where
 readConfigOrDie :: FilePath -> IO Config
 readConfigOrDie path = do
   contents <- BS.readFile path
-  case decodeEither contents of
+  case decodeEither' contents of
     Left err -> do
-      hPutStrLn stderr $ "Can't read config: " ++ err
+      hPutStrLn stderr $ "Can't read config: " ++ show err
       exitFailure
     Right config -> return config
 

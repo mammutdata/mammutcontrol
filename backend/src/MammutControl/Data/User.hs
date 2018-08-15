@@ -71,21 +71,24 @@ instance Default Constant UserID (Column PGInt8) where
   def = lmap unUserID def
 
 data User' f = User
-  { userID           :: Field f 'Opt UserID
-  , userEmail        :: Field f 'Req T.Text
-  , userName         :: Field f 'Req T.Text
-  , userPasswordHash :: Field f 'Req PasswordHash
-  , userCreationTime :: Field f 'Opt UTCTime
+  { userID           :: Field f 'ReadOnly UserID
+  , userEmail        :: Field f 'Required T.Text
+  , userName         :: Field f 'Required T.Text
+  , userPasswordHash :: Field f 'Required PasswordHash
+  , userCreationTime :: Field f 'ReadOnly UTCTime
   } deriving Generic
 
 type User = User' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Opt UserID) (Field g 'Opt UserID)
-                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
-                  , Default p (Field f 'Req PasswordHash)
-                              (Field g 'Req PasswordHash)
-                  , Default p (Field f 'Opt UTCTime) (Field g 'Opt UTCTime)
+                  , Default p (Field f 'ReadOnly UserID)
+                              (Field g 'ReadOnly UserID)
+                  , Default p (Field f 'Required T.Text)
+                              (Field g 'Required T.Text)
+                  , Default p (Field f 'Required PasswordHash)
+                              (Field g 'Required PasswordHash)
+                  , Default p (Field f 'ReadOnly UTCTime)
+                              (Field g 'ReadOnly UTCTime)
                   ) => Default p (User' f) (User' g)
 
 instance ToJSON User where
@@ -136,13 +139,12 @@ createUserFromData :: (MonadMultiError MCError m, MonadTime m, MonadUser m)
                    => T.Text -> T.Text -> BS.ByteString -> m User
 createUserFromData email name password = do
   hash <- hashPassword password
-  now <- getTime
   let user = User
-        { userID           = Nothing
+        { userID           = ()
         , userEmail        = email
         , userName         = name
         , userPasswordHash = hash
-        , userCreationTime = Just now
+        , userCreationTime = ()
         }
   validateUser (hoistFields user)
     <* (when (BS.null password) $
@@ -158,7 +160,8 @@ validatePassword user password = do
     throwError $ AuthenticationError "wrong password"
   unless (BCrypt.hashUsesPolicy passwordHashingPolicy hash) $ do
     hash' <- hashPassword password
-    void $ editUser (userID user) emptyUser { userPasswordHash = Just hash' }
+    void $ editUserUnvalidated (userID user) $
+      emptyUser { userPasswordHash = Just hash' }
 
 editUser :: (MonadMultiError MCError m, MonadUser m) => UserID -> User' Maybe
          -> m User
@@ -270,7 +273,7 @@ editUserUnvalidatedDataM uid fields = do
 deleteUserDataM :: UserID -> DataM ()
 deleteUserDataM uid = do
   void $ withConn $ \conn ->
-    runDelete conn userTable (\user -> userID user .== constant uid)
+    runDelete conn userTable $ \user -> userID user .== constant uid
 
 passwordHashingPolicy :: BCrypt.HashingPolicy
 passwordHashingPolicy = BCrypt.HashingPolicy

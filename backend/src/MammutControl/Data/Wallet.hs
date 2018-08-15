@@ -32,7 +32,7 @@ import           MammutControl.Error
  - Database
  -}
 
-newtype WalletID = WalletID { unWalletID :: Int64 } deriving Eq
+newtype WalletID = WalletID { unWalletID :: Int64 } deriving (Eq, Show)
 
 type instance ColumnType WalletID = PGInt8
 
@@ -45,22 +45,25 @@ instance Default Constant WalletID (Column PGInt8) where
   def = lmap unWalletID def
 
 data Wallet' f = Wallet
-  { walletID           :: Field f 'Opt WalletID
-  , walletName         :: Field f 'Req T.Text
-  , walletDescription  :: Field f 'Opt (Maybe T.Text)
-  , walletCredits      :: Field f 'Opt Int
-  , walletCreationTime :: Field f 'Opt UTCTime
+  { walletID           :: Field f 'ReadOnly WalletID
+  , walletName         :: Field f 'Required T.Text
+  , walletDescription  :: Field f 'Optional (Maybe T.Text)
+  , walletCredits      :: Field f 'ReadOnly Int
+  , walletCreationTime :: Field f 'ReadOnly UTCTime
   } deriving Generic
 
 type Wallet = Wallet' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Opt WalletID) (Field g 'Opt WalletID)
-                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
-                  , Default p (Field f 'Opt (Maybe T.Text))
-                              (Field g 'Opt (Maybe T.Text))
-                  , Default p (Field f 'Opt Int) (Field g 'Opt Int)
-                  , Default p (Field f 'Opt UTCTime) (Field g 'Opt UTCTime)
+                  , Default p (Field f 'ReadOnly WalletID)
+                              (Field g 'ReadOnly WalletID)
+                  , Default p (Field f 'Required T.Text)
+                              (Field g 'Required T.Text)
+                  , Default p (Field f 'Optional (Maybe T.Text))
+                              (Field g 'Optional (Maybe T.Text))
+                  , Default p (Field f 'ReadOnly Int) (Field g 'ReadOnly Int)
+                  , Default p (Field f 'ReadOnly UTCTime)
+                              (Field g 'ReadOnly UTCTime)
                   ) => Default p (Wallet' f) (Wallet' g)
 
 instance ToJSON Wallet where
@@ -83,15 +86,17 @@ walletTable = table "active_wallets" $ pWallet Wallet
   }
 
 data WalletMembership' f = WalletMembership
-  { wmUserID   :: Field f 'Req UserID
-  , wmWalletID :: Field f 'Req WalletID
+  { wmUserID   :: Field f 'Required UserID
+  , wmWalletID :: Field f 'Required WalletID
   } deriving Generic
 
 type WalletMembership = WalletMembership' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Req UserID)   (Field g 'Req UserID)
-                  , Default p (Field f 'Req WalletID) (Field g 'Req WalletID)
+                  , Default p (Field f 'Required UserID)
+                              (Field g 'Required UserID)
+                  , Default p (Field f 'Required WalletID)
+                              (Field g 'Required WalletID)
                   ) => Default p (WalletMembership' f) (WalletMembership' g)
 
 pWalletMembership :: WalletMembership' TblCol
@@ -119,11 +124,11 @@ wmByWalletID = proc wid -> do
   restrict -< wmWalletID wm .== wid
   returnA -< wm
 
---walletByID :: QueryArr (Column (ColumnType WalletID)) (Wallet' Col)
---walletByID = proc wid -> do
---  wallet <- queryTable walletTable -< ()
---  restrict -< walletID wallet .== wid
---  returnA -< wallet
+walletByID :: QueryArr (Column (ColumnType WalletID)) (Wallet' Col)
+walletByID = proc wid -> do
+  wallet <- queryTable walletTable -< ()
+  restrict -< walletID wallet .== wid
+  returnA -< wallet
 
 walletsByUserID :: QueryArr (Column (ColumnType UserID)) (Wallet' Col)
 walletsByUserID = proc uid -> do
@@ -155,12 +160,14 @@ createWallet wallet uid = withTransaction $ do
 class MonadWallet m where
   createWalletNoOwner :: Wallet' Write -> m Wallet
   addUserToWallet     :: WalletID -> UserID -> m ()
+  getWallet           :: WalletID -> m Wallet
   getWalletsByUserID  :: UserID -> m [Wallet]
   getUsersByWalletID  :: WalletID -> m [User]
 
 instance MonadWallet DataM where
   createWalletNoOwner = createWalletNoOwnerDataM
   addUserToWallet     = addUserToWalletDataM
+  getWallet           = getWalletDataM
   getWalletsByUserID  = getWalletsByUserIDDataM
   getUsersByWalletID  = getUsersByWalletIDDataM
 
@@ -182,6 +189,16 @@ addUserToWalletDataM wid uid = do
   if res > 0
     then return ()
     else throwError $ ValidationError Nothing "could not add user to wallet"
+
+getWalletDataM :: WalletID -> DataM Wallet
+getWalletDataM wid = do
+  res <- withConn $ \conn ->
+    runQuery conn $ limit 1 $ walletByID <<^ \() -> constant wid
+
+  case res of
+    wallet : _ -> return wallet
+    [] -> throwError $ ResourceNotFoundError RTWallet $
+            "wallet with ID=" ++ show wid
 
 getWalletsByUserIDDataM :: UserID -> DataM [Wallet]
 getWalletsByUserIDDataM uid = withConn $ \conn ->

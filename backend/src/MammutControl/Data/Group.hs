@@ -8,9 +8,12 @@ module MammutControl.Data.Group
   , createGroup
   ) where
 
+import           Control.Arrow
+import           Control.Monad
 import           Control.Monad.MultiExcept
 
 import           Data.Aeson
+import           Data.Functor.Identity
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
@@ -44,23 +47,26 @@ instance Default Constant GroupID (Column PGInt8) where
   def = lmap unGroupID def
 
 data Group' f = Group
-  { groupID           :: Field f 'Opt GroupID
-  , groupName         :: Field f 'Req T.Text
-  , groupDescription  :: Field f 'Opt (Maybe T.Text)
-  , groupWalletID     :: Field f 'Opt (Maybe WalletID)
-  , groupCreationTime :: Field f 'Opt UTCTime
+  { groupID           :: Field f 'ReadOnly GroupID
+  , groupName         :: Field f 'Required T.Text
+  , groupDescription  :: Field f 'Optional (Maybe T.Text)
+  , groupWalletID     :: Field f 'Optional (Maybe WalletID)
+  , groupCreationTime :: Field f 'ReadOnly UTCTime
   } deriving Generic
 
 type Group = Group' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Opt GroupID) (Field g 'Opt GroupID)
-                  , Default p (Field f 'Req T.Text) (Field g 'Req T.Text)
-                  , Default p (Field f 'Opt (Maybe T.Text))
-                              (Field g 'Opt (Maybe T.Text))
-                  , Default p (Field f 'Opt (Maybe WalletID))
-                              (Field g 'Opt (Maybe WalletID))
-                  , Default p (Field f 'Opt UTCTime) (Field g 'Opt UTCTime)
+                  , Default p (Field f 'ReadOnly GroupID)
+                              (Field g 'ReadOnly GroupID)
+                  , Default p (Field f 'Required T.Text)
+                              (Field g 'Required T.Text)
+                  , Default p (Field f 'Optional (Maybe T.Text))
+                              (Field g 'Optional (Maybe T.Text))
+                  , Default p (Field f 'Optional (Maybe WalletID))
+                              (Field g 'Optional (Maybe WalletID))
+                  , Default p (Field f 'ReadOnly UTCTime)
+                              (Field g 'ReadOnly UTCTime)
                   ) => Default p (Group' f) (Group' g)
 
 instance ToJSON Group where
@@ -83,15 +89,17 @@ groupTable = table "active_groups" $ pGroup Group
   }
 
 data GroupMembership' f = GroupMembership
-  { gmUserID  :: Field f 'Req UserID
-  , gmGroupID :: Field f 'Req GroupID
+  { gmUserID  :: Field f 'Required UserID
+  , gmGroupID :: Field f 'Required GroupID
   } deriving Generic
 
 type GroupMembership = GroupMembership' Identity
 
 deriving instance ( ProductProfunctor p
-                  , Default p (Field f 'Req UserID)   (Field g 'Req UserID)
-                  , Default p (Field f 'Req GroupID) (Field g 'Req GroupID)
+                  , Default p (Field f 'Required UserID)
+                              (Field g 'Required UserID)
+                  , Default p (Field f 'Required GroupID)
+                              (Field g 'Required GroupID)
                   ) => Default p (GroupMembership' f) (GroupMembership' g)
 
 pGroupMembership :: GroupMembership' TblCol
@@ -100,24 +108,24 @@ pGroupMembership :: GroupMembership' TblCol
 pGroupMembership = genericAdaptor
 
 groupMembershipTable :: Table (GroupMembership' WriteCol)
-                               (GroupMembership' Col)
+                              (GroupMembership' Col)
 groupMembershipTable =
   table "group_memberships" $ pGroupMembership GroupMembership
-    { gmUserID  = tableColumn "user_id"
-    , gmGroupID = tableColumn "group_id"
+    { gmUserID       = tableColumn "user_id"
+    , gmGroupID      = tableColumn "group_id"
     }
 
---gmByUserID :: QueryArr (Column (ColumnType UserID)) (GroupMembership' Col)
---gmByUserID = proc uid -> do
---  gm <- queryTable groupMembershipTable -< ()
---  restrict -< gmUserID gm .== uid
---  returnA -< gm
+gmByUserID :: QueryArr (Column (ColumnType UserID)) (GroupMembership' Col)
+gmByUserID = proc uid -> do
+  gm <- queryTable groupMembershipTable -< ()
+  restrict -< gmUserID gm .== uid
+  returnA -< gm
 
---gmByGroupID :: QueryArr (Column (ColumnType GroupID)) (GroupMembership' Col)
---gmByGroupID = proc gid -> do
---  gm <- queryTable groupMembershipTable -< ()
---  restrict -< gmGroupID gm .== gid
---  returnA -< gm
+gmByGroupID :: QueryArr (Column (ColumnType GroupID)) (GroupMembership' Col)
+gmByGroupID = proc gid -> do
+  gm <- queryTable groupMembershipTable -< ()
+  restrict -< gmGroupID gm .== gid
+  returnA -< gm
 
 --groupByID :: QueryArr (Column (ColumnType GroupID)) (Group' Col)
 --groupByID = proc gid -> do
@@ -125,16 +133,16 @@ groupMembershipTable =
 --  restrict -< groupID group .== gid
 --  returnA -< group
 
---groupsByUserID :: QueryArr (Column (ColumnType UserID)) (Group' Col)
---groupsByUserID = proc uid -> do
---  group <- queryTable groupTable -< ()
---  restrictExists gmByUserID -< uid
---  returnA -< group
+groupsByUserID :: QueryArr (Column (ColumnType UserID)) (Group' Col)
+groupsByUserID = proc uid -> do
+  group <- queryTable groupTable -< ()
+  restrictExists gmByUserID -< uid
+  returnA -< group
 
---usersByGroupID :: QueryArr (Column (ColumnType GroupID)) (User' Col)
---usersByGroupID = proc gid -> do
---  gm <- gmByGroupID -< gid
---  userByID -< gmUserID gm
+usersByGroupID :: QueryArr (Column (ColumnType GroupID)) (User' Col)
+usersByGroupID = proc gid -> do
+  gm <- gmByGroupID -< gid
+  userByID -< gmUserID gm
 
 {-
  - Logic
@@ -148,12 +156,20 @@ createGroup group uid = withTransaction $ do
   return group'
 
 class MonadGroup m where
-  createGroupNoOwner :: Group' Write -> m Group
-  addUserToGroup     :: GroupID -> UserID -> m ()
+  createGroupNoOwner  :: Group' Write -> m Group
+  addUserToGroup      :: GroupID -> UserID -> m ()
+  removeUserFromGroup :: GroupID -> UserID -> m ()
+  getGroupsByUserID   :: UserID -> m [Group]
+  getUsersByGroupID   :: GroupID -> m [User]
+  deleteGroup         :: GroupID -> m ()
 
 instance MonadGroup DataM where
-  createGroupNoOwner = createGroupNoOwnerDataM
-  addUserToGroup     = addUserToGroupDataM
+  createGroupNoOwner  = createGroupNoOwnerDataM
+  addUserToGroup      = addUserToGroupDataM
+  removeUserFromGroup = removeUserFromGroupDataM
+  getGroupsByUserID   = getGroupsByUserIDDataM
+  getUsersByGroupID   = getUsersByGroupIDDataM
+  deleteGroup         = deleteGroupDataM
 
 createGroupNoOwnerDataM :: Group' Write -> DataM Group
 createGroupNoOwnerDataM group = do
@@ -173,3 +189,37 @@ addUserToGroupDataM gid uid = do
   if res > 0
     then return ()
     else throwError $ ValidationError Nothing "could not add user to group"
+
+-- This could be done in one request but Opaleye doesn't seem to support
+-- DELETE FROM ... WHERE EXISTS (SELECT ...)
+removeUserFromGroupDataM :: GroupID -> UserID -> DataM ()
+removeUserFromGroupDataM gid uid = do
+  res <- withConn $ \conn ->
+    runQuery conn $ countRows $ proc () -> do
+      user <- usersByGroupID -< constant gid
+      restrict -< userID user ./= constant uid
+      returnA -< user
+
+  when (res == [0 :: Int64]) $
+    throwError $ ConstraintCheckError ConstraintGroupHasAtLeastOneMember
+
+  void $ withConn $ \conn ->
+    runDelete conn groupMembershipTable $ \gm ->
+      gmGroupID gm .== constant gid
+      .&& gmUserID gm .== constant uid
+
+getGroupsByUserIDDataM :: UserID -> DataM [Group]
+getGroupsByUserIDDataM uid = withConn $ \conn ->
+  runQuery conn $ groupsByUserID <<^ \() -> constant uid
+
+getUsersByGroupIDDataM :: GroupID -> DataM [User]
+getUsersByGroupIDDataM gid = withConn $ \conn ->
+  runQuery conn $ usersByGroupID <<^ \() -> constant gid
+
+deleteGroupDataM :: GroupID -> DataM ()
+deleteGroupDataM gid = do
+  withConn $ \conn -> do
+    void $ runDelete conn groupMembershipTable $ \gm ->
+      gmGroupID gm .== constant gid
+    void $ runDelete conn groupTable $ \group ->
+      groupID group .== constant gid

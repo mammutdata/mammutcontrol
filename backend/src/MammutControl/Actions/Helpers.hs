@@ -1,8 +1,14 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE MagicHash #-}
+
 module MammutControl.Actions.Helpers
   ( module MammutControl.Actions.Helpers
   , module Servant.Server
   , throwError
   ) where
+
+import           GHC.Exts (Proxy#, proxy#)
+import           GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import           Control.Monad (forM_)
 import           Control.Monad.Base
@@ -12,6 +18,7 @@ import qualified Control.Monad.Except as E
 import           Data.Aeson
 import           Data.Time (addUTCTime)
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.Text as T
 
 import           System.IO
 
@@ -19,6 +26,7 @@ import           Servant.Auth.Server
 import           Servant.Server
 
 import           MammutControl.AccessControl
+import           MammutControl.Data.Group
 import           MammutControl.Data.Types
 import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
@@ -26,9 +34,11 @@ import           MammutControl.Error
 
 type Action = AccessControlT DataM
 
-type MonadAction m = ( MonadMultiError MCError m
+type MonadAction m = ( MonadAccessControl m
+                     , MonadMultiError MCError m
                      , MonadTime m
                      , MonadTransaction m
+                     , MonadGroup m
                      , MonadUser m
                      , MonadWallet m
                      )
@@ -68,3 +78,10 @@ runAction pool mSession action = do
         liftBase $ hPutStrLn stderr $ "Error running action: " ++ show err
       E.throwError $ toServantErr errs
     Right res -> return res
+
+newtype ListWrapper (key :: Symbol) a = ListWrapper [a]
+
+instance (KnownSymbol key, ToJSON a) => ToJSON (ListWrapper key a) where
+  toJSON (ListWrapper xs) =
+    let key = T.pack $ symbolVal' (proxy# :: Proxy# key)
+    in object [ key .= xs ]

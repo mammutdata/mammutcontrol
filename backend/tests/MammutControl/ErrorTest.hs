@@ -4,7 +4,7 @@ module MammutControl.ErrorTest
 
 import Data.List.NonEmpty
 
-import Servant
+import Servant.Server
 
 import MammutControl.Error
 

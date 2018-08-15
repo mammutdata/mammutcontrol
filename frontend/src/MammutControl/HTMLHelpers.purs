@@ -18,6 +18,12 @@ module MammutControl.HTMLHelpers
   , submitButton
   , inputHelper
   , errorCard
+  , box
+  , sectionTitle
+  , addButton
+  , spinner
+  , lightBand
+  , initFormSelects
   ) where
 
 import Prelude
@@ -25,10 +31,14 @@ import Prelude
 import Data.Array ((:))
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 
+import Effect (Effect)
+
 import DOM.HTML.Indexed as H
 
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+
+foreign import initFormSelects :: Effect Unit
 
 container :: HH.ClassName
 container = HH.ClassName "container"
@@ -97,7 +107,7 @@ inputField6 :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
 inputField6 = HH.div [HP.classes [col, l6, m12, s12, inputField]]
 
 inputWrapper :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
-inputWrapper children = row_ [inputField12 children]
+inputWrapper = inputField12
 
 input :: forall a p i. Maybe a -> HH.Leaf H.HTMLinput p i
 input mErr props =
@@ -135,3 +145,35 @@ errorCard children =
                  children
         ]
     ]
+
+box :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
+box children =
+  HH.div [HP.class_ (HH.ClassName "card")]
+    [ HH.div [HP.class_ (HH.ClassName "card-content")] children ]
+
+sectionTitle :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
+sectionTitle = HH.h1 [HP.class_ (HH.ClassName "header header--underlined")]
+
+addButton :: forall p i. Array (HP.IProp H.HTMLa i) -> HH.HTML p i
+addButton props =
+  HH.a
+    (HP.class_
+       (HH.ClassName "btn-floating btn-small waves-effect waves-light teal")
+     : props)
+    [HH.i [HP.class_ (HH.ClassName "material-icons")] [HH.text "add"]]
+
+spinner :: forall p i. HH.HTML p i
+spinner =
+  HH.div [HP.class_ (HH.ClassName "preloader-wrapper small active")]
+    [ HH.div [HP.class_ (HH.ClassName "spinner-layer spinner-green-only")]
+        [ HH.div [HP.class_ (HH.ClassName "circle-clipper left")]
+            [HH.div [HP.class_ (HH.ClassName "circle")] []]
+        , HH.div [HP.class_ (HH.ClassName "gap-patch")]
+            [HH.div [HP.class_ (HH.ClassName "circle")] []]
+        , HH.div [HP.class_ (HH.ClassName "circle-clipper right")]
+            [HH.div [HP.class_ (HH.ClassName "circle")] []]
+        ]
+    ]
+
+lightBand :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
+lightBand = HH.div [HP.class_ (HH.ClassName "white")]

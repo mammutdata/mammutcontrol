@@ -10,9 +10,11 @@ import Servant hiding (throwError)
 import Servant.Auth
 import Servant.Auth.Server
 
+import MammutControl.Actions.GroupActions
 import MammutControl.Actions.Helpers
 import MammutControl.Actions.UserActions
 import MammutControl.Actions.WalletActions
+import MammutControl.Data.Group
 import MammutControl.Data.Types
 import MammutControl.Data.User
 import MammutControl.Data.Wallet
@@ -36,6 +38,14 @@ type AuthenticatedAPI =
   :<|> "users" :> Capture "user_id" UserID :> "wallets" :> Get '[JSON] [Wallet]
   :<|> "wallets" :> ReqBody '[JSON] WalletData :> PostCreated '[JSON] Wallet
 
+  :<|> "groups" :> Get '[JSON] (ListWrapper "groups" Group)
+  :<|> "groups" :> ReqBody '[JSON] GroupData :> PostCreated '[JSON] Group
+  :<|> "groups" :> Capture "group_id" GroupID :> "users" :> Get '[JSON] [User]
+  :<|> "groups" :> Capture "group_id" GroupID :> "users"
+                :> ReqBody '[JSON] GroupMembershipData :> Post '[JSON] [User]
+  :<|> "groups" :> Capture "group_id" GroupID :> "users"
+                :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
+
 unauthenticatedAPI :: JWTSettings -> ServerT UnauthenticatedAPI Action
 unauthenticatedAPI jwtSettings =
   signinAction jwtSettings
@@ -48,6 +58,12 @@ authenticatedAPI session =
 
   :<|> getWalletsAction
   :<|> createWalletAction session
+
+  :<|> getGroupsAction session
+  :<|> createGroupAction session
+  :<|> getMembersOfGroupAction
+  :<|> addUserToGroupAction
+  :<|> removeUserFromGroupAction
 
 api :: Pool Connection -> IO Application
 api pool = do

@@ -2,9 +2,9 @@ module MammutControl.Actions.UserActions
   ( LoginInfo(..)
   , UserCredentials(..)
   , signinAction
-  , UserCreationData
+  , UserCreationData(..)
   , createUserAction
-  , UserEditionData
+  , UserEditionData(..)
   , editUserAction
   , deleteUserAction
   ) where
@@ -21,6 +21,7 @@ import qualified Data.Text.Lazy.Encoding as TLE
 import           Servant
 import           Servant.Auth.Server
 
+import           MammutControl.AccessControl
 import           MammutControl.Actions.Helpers
 import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
@@ -42,11 +43,12 @@ instance FromJSON UserCredentials where
 
 signinAction :: (MonadBase IO m, MonadAction m)
              => JWTSettings -> UserCredentials -> m LoginInfo
-signinAction jwtSettings (UserCredentials email password) = do
-  user <- getUserByEmail email
-  validatePassword user password
-  token <- makeSessionToken jwtSettings user
-  return $ LoginInfo user token
+signinAction jwtSettings (UserCredentials email password) =
+  skipAccessControl $ do
+    user <- getUserByEmail email
+    validatePassword user password
+    token <- makeSessionToken jwtSettings user
+    return $ LoginInfo user token
 
 data UserCreationData = UserCreationData T.Text T.Text BS.ByteString
 
@@ -60,16 +62,16 @@ createUserAction :: (MonadBase IO m, MonadAction m)
                  => JWTSettings -> UserCreationData -> m LoginInfo
 createUserAction jwtSettings (UserCreationData email name password) = do
   let wallet = Wallet
-        { walletID           = Nothing
+        { walletID           = ()
         , walletName         = "personal"
-        , walletDescription  = Just (Just "This wallet was automatically\
-                                          \ created together with your\
-                                          \ account.")
-        , walletCredits      = Nothing
-        , walletCreationTime = Nothing
+        , walletDescription  = Just "This wallet was automatically\
+                                    \ created together with your\
+                                    \ account."
+        , walletCredits      = ()
+        , walletCreationTime = ()
         }
   user <- createUserFromData email name password
-  _     <- createWallet wallet (userID user)
+  _    <- asUser (userID user) $ createWallet wallet (userID user)
   token <- makeSessionToken jwtSettings user
   return $ LoginInfo user token
 
