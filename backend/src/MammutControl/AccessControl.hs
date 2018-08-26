@@ -10,6 +10,7 @@ import Control.Monad.Base
 import Control.Monad.MultiExcept
 import Control.Monad.Reader
 
+import MammutControl.AccessControl.Class
 import MammutControl.Data.Group
 import MammutControl.Data.Types
 import MammutControl.Data.User
@@ -23,7 +24,7 @@ data AccessType
 
 newtype AccessControlT m a
   = AccessControlT { unAccessControlT :: ReaderT AccessType m a }
-  deriving newtype (Functor, Applicative, Monad, MonadTrans)
+  deriving newtype (Applicative, Functor, Monad, MonadTrans)
 
 deriving newtype instance MonadBase IO m => MonadBase IO (AccessControlT m)
 deriving newtype instance MonadMultiError MCError m
@@ -74,10 +75,6 @@ guardUserIDIn uids err = do
 --  case muid of
 --    Nothing -> notLoggedInError
 --    Just _ -> return ()
-
-class MonadAccessControl m where
-  skipAccessControl :: m a -> m a
-  asUser :: UserID -> m a -> m a
 
 instance MonadAccessControl (AccessControlT m) where
   skipAccessControl =

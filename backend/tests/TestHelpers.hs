@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module TestHelpers
   ( module TestHelpers
   , module Hedgehog
@@ -342,6 +344,10 @@ runStubbedDataT_ action = do
 
 dummyJWTSettings :: JWTSettings
 dummyJWTSettings = defaultJWTSettings $ fromOctets $ BS8.replicate 64 'a'
+
+ignoreAccessControl :: AccessControlT m a -> m a
+ignoreAccessControl action =
+  runAccessControlT (skipAccessControl action) Nothing
 
 runAction :: Maybe UserID -> AccessControlT m a -> m a
 runAction = flip runAccessControlT

@@ -2,7 +2,8 @@ with import <nixpkgs> {};
 stdenv.mkDerivation {
   name = "mammut-control";
   buildInputs = [
-    haskell.compiler.ghc822
+    haskell.compiler.ghc841
+    haskellPackages.ghcid
     postgresql
     zlib
   ];

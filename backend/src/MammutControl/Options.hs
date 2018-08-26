@@ -3,8 +3,6 @@ module MammutControl.Options
   , getOptions
   ) where
 
-import Data.Monoid
-
 import Options.Applicative
 
 newtype Options = Options { optsConfigPath :: FilePath }

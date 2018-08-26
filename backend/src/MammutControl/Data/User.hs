@@ -21,11 +21,10 @@ import           Control.Arrow
 import           Control.Monad (unless, void, when)
 import           Control.Monad.Base
 import           Control.Monad.MultiExcept ( MonadMultiError, catchErrors
-                                           , throwError )
+                                           , sequenceAll_, throwError )
 
 import           Data.Aeson
 import           Data.List.NonEmpty
-import           Data.Foldable (sequenceA_)
 import           Data.Profunctor
 import           Data.Profunctor.Product
 import           Data.Profunctor.Product.Adaptor
@@ -38,8 +37,7 @@ import qualified Crypto.BCrypt as BCrypt
 
 import           Opaleye
 
-import           Servant (FromHttpApiData(..))
-
+import           MammutControl.AccessControl.Class
 import           MammutControl.Data.Types
 import           MammutControl.Error
 
@@ -57,18 +55,6 @@ deriving newtype instance QueryRunnerColumnDefault PGBytea PasswordHash
 
 instance Default Constant PasswordHash (Column PGBytea) where
   def = lmap unPasswordHash def
-
-newtype UserID = UserID { unUserID :: Int64 } deriving Eq
-
-type instance ColumnType UserID = PGInt8
-
-deriving newtype instance QueryRunnerColumnDefault PGInt8 UserID
-deriving newtype instance FromHttpApiData UserID
-deriving newtype instance FromJSON UserID
-deriving newtype instance ToJSON UserID
-
-instance Default Constant UserID (Column PGInt8) where
-  def = lmap unUserID def
 
 data User' f = User
   { userID           :: Field f 'ReadOnly UserID
@@ -135,7 +121,8 @@ userByEmail = proc email -> do
  - Logic
  -}
 
-createUserFromData :: (MonadMultiError MCError m, MonadTime m, MonadUser m)
+createUserFromData :: ( MonadAccessControl m, MonadMultiError MCError m
+                      , MonadTime m, MonadUser m )
                    => T.Text -> T.Text -> BS.ByteString -> m User
 createUserFromData email name password = do
   hash <- hashPassword password
@@ -146,10 +133,12 @@ createUserFromData email name password = do
         , userPasswordHash = hash
         , userCreationTime = ()
         }
-  validateUser (hoistFields user)
-    <* (when (BS.null password) $
-          throwError $ ValidationError (Just ("password", CantBeEmpty))
-                                       "password can't be empty")
+  sequenceAll_
+    [ validateUser $ hoistFields user
+    , when (BS.null password) $
+        throwError $ ValidationError (Just ("password", CantBeEmpty))
+                                     "password can't be empty"
+    ]
   createUser user
 
 validatePassword :: (MonadMultiError MCError m, MonadUser m) => User
@@ -163,18 +152,19 @@ validatePassword user password = do
     void $ editUserUnvalidated (userID user) $
       emptyUser { userPasswordHash = Just hash' }
 
-editUser :: (MonadMultiError MCError m, MonadUser m) => UserID -> User' Maybe
-         -> m User
+editUser :: (MonadAccessControl m, MonadMultiError MCError m, MonadUser m)
+         => UserID -> User' Maybe -> m User
 editUser uid fields = do
   validateUser $ fields { userID = Just uid }
   editUserUnvalidated uid fields
 
-validateUser :: (MonadMultiError MCError m, MonadUser m) => User' Maybe -> m ()
+validateUser :: ( MonadAccessControl m, MonadMultiError MCError m
+                , MonadUser m ) => User' Maybe -> m ()
 validateUser user = do
   emailTaken <- case userEmail user of
     Nothing -> return False
     Just email -> do
-      mUser <- fmap Just (getUserByEmail email)
+      mUser <- skipAccessControl (fmap Just (getUserByEmail email))
         `catchErrors` \(_ :: NonEmpty MCError) -> return Nothing
 
       return $ case (mUser, userID user) of
@@ -182,7 +172,7 @@ validateUser user = do
         (Just user', Just uid) -> uid /= userID user'
         _ -> False
 
-  sequenceA_
+  sequenceAll_
     [ when (maybe False T.null (userEmail user)) $
         throwError $ ValidationError (Just ("email", CantBeEmpty))
                                      "email can't be empty"

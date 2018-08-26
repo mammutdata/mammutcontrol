@@ -26,7 +26,7 @@ createGroupTests = testGroup "createGroup"
       descr <- forAll $ Gen.maybe descriptionGen
 
       eRes <- runStubbedDataT_ $ do
-        user <- createUserFromData email name pwd
+        user <- ignoreAccessControl $ createUserFromData email name pwd
         let group = Group
               { groupID           = ()
               , groupName         = gname

@@ -18,10 +18,12 @@ import           Control.Monad.Base
 import           Control.Monad.MultiExcept
 import           Control.Monad.Reader
 
+import           Data.Aeson
 import           Data.Functor.Identity (Identity)
 import           Data.Int (Int64)
 import           Data.List.NonEmpty
 import           Data.Pool (Pool, withResource)
+import           Data.Profunctor
 import           Data.Profunctor.Product.Default
 import           Data.Time (UTCTime, getCurrentTime)
 import qualified Data.Text as T
@@ -30,6 +32,8 @@ import           Database.PostgreSQL.Simple ( Connection, begin, commit
                                             , rollback )
 
 import           Opaleye
+
+import           Servant (FromHttpApiData(..))
 
 import           MammutControl.Error
 
@@ -62,7 +66,8 @@ type family Field f req a where
   Field Write 'Optional a         = Maybe a
   Field Write 'Required a         = a
   Field Write 'ReadOnly a         = ()
-  Field f _ a                     = f a
+
+  Field f _ a = f a
 
 class HoistField a b where
   hoistField :: a -> b
@@ -163,3 +168,18 @@ instance MonadTime DataM where
 
 instance MonadTime m => MonadTime (ReaderT r m) where
   getTime = lift getTime
+
+-- UserID is defined here because it is used by MammutControl.AccessControl on
+-- which depends MammutControl.Data.User, i.e. to avoid circular dependency.
+
+newtype UserID = UserID { unUserID :: Int64 } deriving (Eq, Show)
+
+type instance ColumnType UserID = PGInt8
+
+deriving newtype instance QueryRunnerColumnDefault PGInt8 UserID
+deriving newtype instance FromHttpApiData UserID
+deriving newtype instance FromJSON UserID
+deriving newtype instance ToJSON UserID
+
+instance Default Constant UserID (Column PGInt8) where
+  def = lmap unUserID def

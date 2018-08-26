@@ -9,7 +9,7 @@
   "dependencies": {
     "purescript-prelude": "^4.0.0",
     "purescript-console": "^4.1.0",
-    "purescript-halogen": "#master",
+    "purescript-halogen": "^4.0.0",
     "purescript-routing": "^8.0.0",
     "purescript-affjax": "^6.0.0",
     "purescript-aff": "^5.0.0",
@@ -18,5 +18,9 @@
   },
   "devDependencies": {
     "purescript-psci-support": "^4.0.0"
+  },
+  "resolutions": {
+    "purescript-halogen": "^4.0.0",
+    "purescript-halogen-vdom": "^3.0.0"
   }
 }

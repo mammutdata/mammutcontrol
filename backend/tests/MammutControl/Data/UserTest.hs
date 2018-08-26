@@ -29,7 +29,7 @@ createUserFromDataTests = testGroup "createUserFromData"
           return $ if pwd == "secret"
             then StubResult hash
             else StubNotMatched
-        createUserFromData "bob@email.com" "Bob" "secret"
+        ignoreAccessControl $ createUserFromData "bob@email.com" "Bob" "secret"
 
       case eUser of
         Left errs -> annotateShow errs >> failure
@@ -41,9 +41,10 @@ createUserFromDataTests = testGroup "createUserFromData"
 
   , testProperty "throws a validation error if the email is\
                  \ taken" $ once $ property $ do
-      eRes <- runStubbedDataT_ $ do
+      eRes <- runStubbedDataT_ $ ignoreAccessControl $ do
         _ <- createUserFromData "bob@email.com" "Bob" "secret"
         createUserFromData "bob@email.com" "Name" "secret"
+
       case eRes of
         Left (ValidationError (Just ("email", AlreadyTaken)) _ :| []) ->
           return ()
@@ -56,7 +57,7 @@ validatePasswordTests = testGroup "validatePassword"
   [ testProperty "returns () when the password is\
                  \ correct" $ withTests 10 $ property $ do
       pwd <- forAll passwordGen
-      eRes <- runStubbedDataT_ $ do
+      eRes <- runStubbedDataT_ $ ignoreAccessControl $  do
         user <- createUserFromData "bob@email.tld" "Bob" pwd
         validatePassword user pwd
       eRes === Right ()
@@ -67,7 +68,7 @@ validatePasswordTests = testGroup "validatePassword"
       pwd' <- forAll passwordGen
       guard $ pwd /= pwd'
 
-      eRes <- runStubbedDataT_ $ do
+      eRes <- runStubbedDataT_ $ ignoreAccessControl $ do
         user <- createUserFromData "bob@email.tld" "Bob" pwd
         validatePassword user pwd'
 
@@ -101,7 +102,7 @@ validateUserTests :: TestTree
 validateUserTests = testGroup "validateUser"
   [ testProperty "returns multiple errors if there are several\
                  \ ones" $ once $ property $ do
-      eRes <- runFakeDataT_ $ do
+      eRes <- runFakeDataT_ $ ignoreAccessControl $ do
         _ <- createUserFromData "bob@email.tld" "Bob" "secret"
         validateUser User
           { userID           = Nothing
@@ -126,19 +127,21 @@ validateUserTests = testGroup "validateUser"
 editUserTests :: TestTree
 editUserTests = testGroup "editUser"
   [ testProperty "validates the user before editing it" $ once $ property $ do
-      (eRes, (fdb, _)) <- runFakeDataT emptyFakeDB initTime $ do
-        user <- createUserFromData "bob@email.tld" "Bob" "secret"
-        editUser (userID user) $ emptyUser
-          { userName = Just "", userEmail = Just "alice@email.tld" }
+      (eRes, (fdb, _)) <-
+        runFakeDataT emptyFakeDB initTime $ ignoreAccessControl $ do
+          user <- createUserFromData "bob@email.tld" "Bob" "secret"
+          editUser (userID user) $ emptyUser
+            { userName = Just "", userEmail = Just "alice@email.tld" }
 
-      when (isRight eRes) $ failure
+      when (isRight eRes) failure
       case fdbUsers fdb of
         [user] -> do
+          annotateShow $ fmap (const ()) eRes -- we know it's Left
           userEmail user === "bob@email.tld"
         _ -> failure
 
   , testProperty "edits a user" $ once $ property $ do
-      eUser <- runFakeDataT_ $ do
+      eUser <- runFakeDataT_ $ ignoreAccessControl $ do
         user <- createUserFromData "bob@email.tld" "Bob" "secret"
         _ <- editUser (userID user) $ emptyUser
           { userName         = Just "Alice"

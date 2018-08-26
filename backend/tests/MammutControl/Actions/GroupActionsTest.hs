@@ -69,7 +69,8 @@ createGroupActionTests = testGroup "createGroupAction"
       wdescr <- forAll $ Gen.maybe descriptionGen
 
       eRes <- runStubbedDataT_ $ do
-        bob <- createUserFromData "bob@email.tld" "Bob" "secret"
+        bob <- ignoreAccessControl $
+          createUserFromData "bob@email.tld" "Bob" "secret"
         let wallet' = Wallet
               { walletID           = ()
               , walletName         = wname
@@ -99,7 +100,7 @@ addUserToGroupActionTests = testGroup "addUserToGroupAction"
       twice <- forAll Gen.bool
 
       eRes <- runStubbedDataT_ $ do
-        _ <- createUserFromData email uname pwd
+        _ <- ignoreAccessControl $ createUserFromData email uname pwd
 
         runActionWithUser $ \otherUser -> do
           group <- createGroupAction (Session (userID otherUser)) $
@@ -115,10 +116,13 @@ addUserToGroupActionTests = testGroup "addUserToGroupAction"
   , testProperty "prevents the user from adding users to a group without\
                  \ membership" $ once $ property $ do
       eRes <- runStubbedDataT_ $ do
-        bob     <- createUserFromData "bob@email.tld"     "Bob"     "secret"
-        _       <- createUserFromData "alice@email.tld"   "Alice"   "secret"
-        mallory <- createUserFromData "mallory@email.tld" "Mallory" "secret"
-        group   <- createGroup myCompanyGroupWrite (userID bob)
+        bob <- ignoreAccessControl $
+          createUserFromData "bob@email.tld" "Bob" "secret"
+        _ <- ignoreAccessControl $
+          createUserFromData "alice@email.tld" "Alice" "secret"
+        mallory <- ignoreAccessControl $
+          createUserFromData "mallory@email.tld" "Mallory" "secret"
+        group <- createGroup myCompanyGroupWrite (userID bob)
 
         runAction (Just (userID mallory)) $ do
           addUserToGroupAction (groupID group) $
@@ -132,9 +136,12 @@ removeUserGromGroupActionTests = testGroup "removeUserFromGroup"
   [ testProperty "prevents a user from deleting user from group without\
                  \ membership" $ once $ property $ do
       eRes <- runFakeDataT_ $ do
-        alice <- createUserFromData "Alice" "alice@email.tld" "secret"
-        bob   <- createUserFromData "Bob"   "bob@email.tld"   "secret"
-        cecil <- createUserFromData "Cecil" "cecil@email.tld" "secret"
+        alice <- ignoreAccessControl $
+          createUserFromData "Alice" "alice@email.tld" "secret"
+        bob   <- ignoreAccessControl $
+          createUserFromData "Bob"   "bob@email.tld" "secret"
+        cecil <- ignoreAccessControl $
+          createUserFromData "Cecil" "cecil@email.tld" "secret"
         group <- createGroup myCompanyGroupWrite (userID alice)
         addUserToGroup (groupID group) (userID bob)
 

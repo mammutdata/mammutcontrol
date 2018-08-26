@@ -13,7 +13,8 @@ import           GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 import           Control.Monad (forM_)
 import           Control.Monad.Base
 import           Control.Monad.MultiExcept
-import qualified Control.Monad.Except as E
+import qualified Control.Exception as E
+import qualified Control.Monad.Except as Except
 
 import           Data.Aeson
 import           Data.Time (addUTCTime)
@@ -63,21 +64,25 @@ makeSessionToken jwtSettings user = do
   time <- getTime
   let session = Session { sessionUserID = userID user }
   eRes <- liftBase $
-    makeJWT session jwtSettings (Just (addUTCTime (7*24*3600) time))
+    makeJWT session jwtSettings $ Just $ addUTCTime (7*24*3600) time
   case eRes of
     Left  err   -> throwError $ AuthenticationError $ show err
     Right token -> return token
 
 runAction :: Pool Connection -> Maybe Session -> Action a -> Handler a
 runAction pool mSession action = do
-  eRes <- liftBase $ flip runDataM pool $ withTransaction $
+  eRes <- liftBase $ E.try $ flip runDataM pool $ withTransaction $
     runAccessControlT action (sessionUserID <$> mSession)
   case eRes of
-    Left errs -> do
+    Left err -> do
+      liftBase $ hPutStrLn stderr $ "IO error when running action: "
+                                    ++ show (err :: E.SomeException)
+      Except.throwError systemError
+    Right (Left errs) -> do
       forM_ errs $ \err ->
-        liftBase $ hPutStrLn stderr $ "Error running action: " ++ show err
-      E.throwError $ toServantErr errs
-    Right res -> return res
+        liftBase $ hPutStrLn stderr $ "Error when running action: " ++ show err
+      Except.throwError $ toServantErr errs
+    Right (Right res) -> return res
 
 newtype ListWrapper (key :: Symbol) a = ListWrapper [a]
 

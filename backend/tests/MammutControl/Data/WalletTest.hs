@@ -26,7 +26,7 @@ createWalletTests = testGroup "createWallet"
         [Gen.constant Nothing, Just <$> descriptionGen]
 
       eRes <- runStubbedDataT_ $ do
-        user <- createUserFromData email name pwd
+        user <- ignoreAccessControl $ createUserFromData email name pwd
         let wallet = Wallet
               { walletID           = ()
               , walletName         = wname

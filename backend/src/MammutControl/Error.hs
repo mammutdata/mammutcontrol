@@ -5,11 +5,11 @@ module MammutControl.Error
   , MCError(..)
   , toServantErr
   , WithJSONErrors(..)
+  , systemError
   ) where
 
 import           Data.Aeson
 import           Data.List.NonEmpty (NonEmpty(..), toList)
-import           Data.Monoid
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -104,6 +104,10 @@ mkErr base err = base
   { errHeaders = ("Content-Type", "application/json") : errHeaders base
   , errBody    = encode err
   }
+
+systemError :: ServantErr
+systemError = mkErr err500 $ SingleError $
+  SingleJSONError "Something went wrong" Nothing Nothing
 
 data JSONError
   = SingleError SingleJSONError
