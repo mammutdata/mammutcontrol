@@ -7,7 +7,9 @@ import Prelude
 
 import Data.Array ((:))
 import Data.Either (Either(..))
+import Data.Either.Nested
 import Data.Foldable (foldM)
+import Data.Functor.Coproduct.Nested
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 
 import Effect.Aff.Class (class MonadAff)
@@ -18,12 +20,14 @@ import Web.Event.Event (Event, preventDefault)
 
 import Halogen as H
 import Halogen.Aff as HA
+import Halogen.Component.ChildPath as CP
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
 import MammutControl.API.Helpers as API
 import MammutControl.API.UserAPI as API
+import MammutControl.Components.Common.InputField as InputField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
@@ -58,6 +62,11 @@ data Query a
   | ChangePasswordConfirmation String a
   | FormSubmitted Event a
 
+type ChildQuery
+  = Coproduct5 MenuBar.Query InputField.Query InputField.Query InputField.Query
+               InputField.Query
+type ChildSlot = Either5 Unit Unit Unit Unit Unit
+
 component :: forall m. MonadAff m => H.Component HH.HTML Query Unit Void m
 component = H.parentComponent
   { initialState: const initialState
@@ -67,16 +76,16 @@ component = H.parentComponent
   }
 
 render :: forall m. MonadAff m => State
-       -> H.ParentHTML Query MenuBar.Query Unit m
+       -> H.ParentHTML Query ChildQuery ChildSlot m
 render st =
   HH.div_
-    [ HH.slot unit MenuBar.component { route: Signup } absurd
+    [ HH.slot' CP.cp1 unit MenuBar.component { route: Signup } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
         [MHH.centeredDiv [renderForm st]]
     ]
 
 renderForm :: forall m. MonadAff m => State
-           -> H.ParentHTML Query MenuBar.Query Unit m
+           -> H.ParentHTML Query ChildQuery ChildSlot m
 renderForm st =
   MHH.form
     [ HE.onSubmit (HE.input FormSubmitted) ]
@@ -85,61 +94,49 @@ renderForm st =
         Just errHTML -> MHH.errorCard [errHTML]
 
     , MHH.box
-        [ MHH.inputWrapper
-            [ MHH.input st.nameError
-                [ HP.type_ HP.InputText
-                , HP.value st.name
-                , HP.name "name"
-                , HP.autofocus true
-                , HE.onValueInput (HE.input ChangeName)
-                ]
-            , HH.label [ HP.for "name" ] [ HH.text "Full name" ]
-            , MHH.inputHelper "" st.nameError
-            ]
+        [ HH.slot' CP.cp2 unit InputField.component
+            (InputField.defaultInput
+              { name      = "name"
+              , title     = "Full name"
+              , error     = st.nameError
+              , value     = st.name
+              , autofocus = true
+              }) (HE.input ChangeName)
 
-        , MHH.inputWrapper
-            [ MHH.input st.emailError
-                [ HP.type_ HP.InputEmail
-                , HP.value st.email
-                , HP.name "email"
-                , HE.onValueInput (HE.input ChangeEmail)
-                ]
-            , HH.label [ HP.for "email" ] [ HH.text "Email" ]
-            , MHH.inputHelper "" st.emailError
-            ]
+        , HH.slot' CP.cp3 unit InputField.component
+            (InputField.defaultInput
+              { name      = "email"
+              , title     = "Email"
+              , error     = st.emailError
+              , value     = st.email
+              , inputType = HP.InputEmail
+              }) (HE.input ChangeEmail)
 
-        , MHH.row_
-            [ MHH.inputField6
-               [ MHH.inputNoValidate st.password st.passwordError
-                   [ HP.type_ HP.InputPassword
-                   , HP.value st.password
-                   , HP.name "password"
-                   , HE.onValueInput (HE.input ChangePassword)
-                   ]
-               , HH.label [ HP.for "password" ] [ HH.text "Password" ]
-               , MHH.inputHelper "" st.passwordError
-               ]
+        , HH.slot' CP.cp4 unit InputField.component
+            (InputField.defaultInput
+              { name      = "password"
+              , title     = "Password"
+              , error     = st.passwordError
+              , value     = st.password
+              , inputType = HP.InputPassword
+              , wrapper   = MHH.inputField6
+              }) (HE.input ChangePassword)
 
-            , MHH.inputField6
-                [ MHH.inputNoValidate st.passwordConfirmation Nothing
-                    [ HP.type_ HP.InputPassword
-                    , HP.value st.passwordConfirmation
-                    , HP.name "password_confirmation"
-                    , HE.onValueInput (HE.input ChangePasswordConfirmation)
-                    ]
-                , HH.label
-                    [ HP.for "password_confirmation" ]
-                    [ HH.text "Password confirmation" ]
-                ]
-            ]
+        , HH.slot' CP.cp5 unit InputField.component
+            (InputField.defaultInput
+              { name      = "password_confirmation"
+              , title     = "Password confirmation"
+              , value     = st.passwordConfirmation
+              , inputType = HP.InputPassword
+              , wrapper   = MHH.inputField6
+              }) (HE.input ChangePasswordConfirmation)
 
-        , MHH.submitButton []
-            [ HH.text "Sign up" ]
+        , MHH.inputField12 [MHH.submitButton [] [HH.text "Sign up"]]
         ]
     ]
 
 eval :: forall m. MonadAff m
-     => Query ~> H.ParentDSL State Query MenuBar.Query Unit Void m
+     => Query ~> H.ParentDSL State Query ChildQuery ChildSlot Void m
 eval = case _ of
   ChangeName name next -> do
     H.modify_ (_ { name = name, nameError = Nothing })
@@ -172,7 +169,7 @@ eval = case _ of
     pure next
 
 processError :: forall m. MonadAff m => API.APIError
-             -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+             -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
 processError = case _ of
   API.APIError _ msg mLoc mCode _ -> do
     let msg' = maybe msg API.humanReadableError mCode
@@ -206,7 +203,7 @@ processError = case _ of
   API.OtherError msg -> H.modify_ (_ { error = Just (HH.text msg) })
 
 checkPasswords
-  :: forall m. H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+  :: forall m. H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
 checkPasswords = do
   st <- H.get
   when (st.password /= st.passwordConfirmation) $

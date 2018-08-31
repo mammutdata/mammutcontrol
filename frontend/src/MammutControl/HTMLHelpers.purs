@@ -149,7 +149,7 @@ errorCard children =
 box :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
 box children =
   HH.div [HP.class_ (HH.ClassName "card")]
-    [ HH.div [HP.class_ (HH.ClassName "card-content")] children ]
+    [ HH.div [HP.class_ (HH.ClassName "card-content")] [row_ children] ]
 
 sectionTitle :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
 sectionTitle = HH.h1 [HP.class_ (HH.ClassName "header header--underlined")]

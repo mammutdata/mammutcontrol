@@ -17,7 +17,8 @@ module.exports = {
   devServer: {
     contentBase: "public",
     port: 1337,
-    stats: "errors-only"
+    stats: "errors-only",
+    overlay: true
   },
 
   entry: [
@@ -42,7 +43,7 @@ module.exports = {
           {
             loader: "purs-loader",
             options: {
-              bundle: true,
+              bundle: !(isWebpackDevServer || isWatch),
               src: [
                 "bower_components/purescript-*/src/**/*.purs",
                 "src/**/*.purs"

@@ -7,10 +7,13 @@ import Prelude
 
 import Data.Array ((:))
 import Data.Either (Either(..))
+import Data.Either.Nested
 import Data.Foldable (foldM)
+import Data.Functor.Coproduct.Nested
 import Data.Int (fromString)
 import Data.List
 import Data.Maybe (Maybe(..), maybe)
+import Data.Tuple (Tuple(..))
 
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
@@ -20,12 +23,15 @@ import Web.Event.Event (Event, preventDefault)
 
 import Halogen as H
 import Halogen.Aff as HA
+import Halogen.Component.ChildPath as CP
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
 import MammutControl.API.GroupAPI as API
 import MammutControl.API.Helpers as API
+import MammutControl.Components.Common.InputField as InputField
+import MammutControl.Components.Common.SelectField as SelectField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
@@ -52,9 +58,13 @@ initialState =
 data Query a
   = ChangeName String a
   | ChangeDescription String a
-  | ChangeWalletID Event a
+  | ChangeWalletID String a
   | FormSubmitted Event a
   | Init a
+
+type ChildQuery
+  = Coproduct4 MenuBar.Query InputField.Query InputField.Query SelectField.Query
+type ChildSlot = Either4 Unit Unit Unit Unit
 
 component :: forall m. MonadAff m => H.Component HH.HTML Query Unit Void m
 component = H.lifecycleParentComponent
@@ -67,10 +77,10 @@ component = H.lifecycleParentComponent
   }
 
 render :: forall m. MonadAff m => State
-       -> H.ParentHTML Query MenuBar.Query Unit m
+       -> H.ParentHTML Query ChildQuery ChildSlot m
 render st =
   HH.div_
-    [ HH.slot unit MenuBar.component { route: GroupsNew } absurd
+    [ HH.slot' CP.cp1 unit MenuBar.component { route: GroupsNew } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
         [ MHH.sectionTitle [HH.text "Add a new group"]
         , HH.p_ [HH.text "Using this form, you can create a new group.\
@@ -86,57 +96,45 @@ render st =
     ]
 
 renderForm :: forall m. MonadAff m => State
-           -> H.ParentHTML Query MenuBar.Query Unit m
+           -> H.ParentHTML Query ChildQuery ChildSlot m
 renderForm st =
   MHH.form [HE.onSubmit (HE.input FormSubmitted)]
     [ case st.error of
         Nothing -> HH.text ""
         Just errHTML -> MHH.errorCard [errHTML]
 
-    , MHH.inputWrapper
-        [ MHH.input st.nameError
-            [ HP.type_ HP.InputText
-            , HP.value st.name
-            , HP.name "name"
-            , HP.autofocus true
-            , HE.onValueInput (HE.input ChangeName)
-            ]
-        , HH.label [ HP.for "name" ] [ HH.text "Name" ]
-        , MHH.inputHelper "" st.nameError
-        ]
+    , HH.slot' CP.cp2 unit InputField.component
+        (InputField.defaultInput
+          { name      = "name"
+          , title     = "Name"
+          , error     = st.nameError
+          , value     = st.name
+          , autofocus = true
+          }) (HE.input ChangeName)
 
-    , MHH.inputWrapper
-        [ MHH.input st.descriptionError
-            [ HP.type_ HP.InputText
-            , HP.value st.description
-            , HP.name "description"
-            , HE.onValueInput (HE.input ChangeDescription)
-            ]
-        , HH.label [ HP.for "description" ] [ HH.text "Description" ]
-        , MHH.inputHelper "" st.descriptionError
-        ]
+    , HH.slot' CP.cp3 unit InputField.component
+        (InputField.defaultInput
+          { name  = "description"
+          , title = "Description"
+          , error = st.descriptionError
+          , value = st.description
+          }) (HE.input ChangeDescription)
 
-    , MHH.inputWrapper
-        [ HH.label [ HP.for "wallet_id" ] [ HH.text "Wallet" ]
-        , HH.div_
-            [ HH.select
-                [ HP.name "wallet_id"
-                , HE.onChange (HE.input ChangeWalletID)
-                ]
-                [ HH.option [HP.selected true] [HH.text "No wallet"]
-                , HH.option [HP.value "4365476"] [HH.text "Wallet 4365476"]
-                ]
-            ]
-        , MHH.inputHelper "Optional default wallet to be charged when a backup\
-                          \ is created in this group." Nothing
-        ]
+    , HH.slot' CP.cp4 unit SelectField.component
+        (SelectField.defaultInput
+          { value       = "FIXME"
+          , name        = "wallet_id"
+          , title       = "Wallet"
+          , description = "Optional default wallet to be charged when a backup\
+                          \ is created in this group."
+          , options     = [Tuple "" "No wallet", Tuple "FIXME" "FIXME"]
+          }) (HE.input ChangeWalletID)
 
-    , MHH.submitButton []
-        [ HH.text "Add" ]
+    , MHH.inputField12 [MHH.submitButton [] [HH.text "Add"]]
     ]
 
 eval :: forall m. MonadAff m
-     => Query ~> H.ParentDSL State Query MenuBar.Query Unit Void m
+     => Query ~> H.ParentDSL State Query ChildQuery ChildSlot Void m
 eval = case _ of
   ChangeName name next -> do
     H.modify_ (_ { name = name, nameError = Nothing })
@@ -161,7 +159,7 @@ eval = case _ of
     pure next
 
 processError :: forall m. MonadAff m => API.APIError
-             -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+             -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
 processError = case _ of
   API.APIError _ msg mLoc mCode _ -> do
     let msg' = maybe msg API.humanReadableError mCode

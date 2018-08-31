@@ -1,0 +1,32 @@
+{
+  "name": "mammut",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon --watch webpack.config.js --watch package.json --watch bower.json --exec 'webpack-dev-server --mode development'",
+    "build": "webpack --mode production"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "pulp": "^12.3.0"
+  },
+  "devDependencies": {
+    "css-loader": "^1.0.0",
+    "materialize-css": "^1.0.0-rc.2",
+    "mini-css-extract-plugin": "^0.4.1",
+    "node-sass": "^4.9.3",
+    "nodemon": "^1.18.3",
+    "purescript-psa": "^0.7.2",
+    "purs-loader": "^3.2.0",
+    "sass-loader": "^7.1.0",
+    "webpack": "^4.16.5",
+    "webpack-cli": "^3.1.0",
+    "webpack-dev-server": "^3.1.5",
+    "xhr2": "^0.1.4"
+  },
+  "author": "",
+  "license": ""
+}

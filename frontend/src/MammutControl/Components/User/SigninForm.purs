@@ -7,7 +7,9 @@ import Prelude
 
 import Data.Array ((:))
 import Data.Either (Either(..))
+import Data.Either.Nested
 import Data.Foldable (foldM)
+import Data.Functor.Coproduct.Nested
 import Data.Maybe (Maybe(..), maybe)
 
 import Effect.Aff.Class (class MonadAff)
@@ -21,12 +23,14 @@ import Web.HTML.Window (location)
 
 import Halogen as H
 import Halogen.Aff as HA
+import Halogen.Component.ChildPath as CP
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
 import MammutControl.API.Helpers as API
 import MammutControl.API.UserAPI as API
+import MammutControl.Components.Common.InputField as InputField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
@@ -49,6 +53,9 @@ data Query a
   | ChangePassword String a
   | FormSubmitted Event a
 
+type ChildQuery = Coproduct3 MenuBar.Query InputField.Query InputField.Query
+type ChildSlot = Either3 Unit Unit Unit
+
 component :: forall m. MonadAff m => H.Component HH.HTML Query Unit Void m
 component = H.parentComponent
   { initialState: const initialState
@@ -58,16 +65,16 @@ component = H.parentComponent
   }
 
 render :: forall m. MonadAff m => State
-       -> H.ParentHTML Query MenuBar.Query Unit m
+       -> H.ParentHTML Query ChildQuery ChildSlot m
 render st =
   HH.div_
-    [ HH.slot unit MenuBar.component { route: Signin } absurd
+    [ HH.slot' CP.cp1 unit MenuBar.component { route: Signin } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
         [MHH.centeredDiv [renderForm st]]
     ]
 
 renderForm :: forall m. MonadAff m => State
-           -> H.ParentHTML Query MenuBar.Query Unit m
+           -> H.ParentHTML Query ChildQuery ChildSlot m
 renderForm st =
   MHH.form
     [ HE.onSubmit (HE.input FormSubmitted) ]
@@ -76,34 +83,29 @@ renderForm st =
         Just errHTML -> MHH.errorCard [errHTML]
 
     , MHH.box
-        [ MHH.inputWrapper
-            [ MHH.input Nothing
-                [ HP.type_ HP.InputText
-                , HP.value st.email
-                , HP.name "email"
-                , HP.autofocus true
-                , HE.onValueInput (HE.input ChangeEmail)
-                ]
-            , HH.label [ HP.for "email" ] [ HH.text "Email" ]
-            ]
+        [ HH.slot' CP.cp2 unit InputField.component
+            (InputField.defaultInput
+              { name      = "email"
+              , title     = "Email"
+              , value     = st.email
+              , inputType = HP.InputEmail
+              }) (HE.input ChangeEmail)
 
-        , MHH.inputWrapper
-            [ MHH.input Nothing
-                [ HP.type_ HP.InputPassword
-                , HP.value st.password
-                , HP.name "password"
-                , HE.onValueInput (HE.input ChangePassword)
-                ]
-            , HH.label [ HP.for "password" ] [ HH.text "Password" ]
-            ]
 
-        , MHH.submitButton []
-            [ HH.text "Sign in" ]
+        , HH.slot' CP.cp3 unit InputField.component
+            (InputField.defaultInput
+              { name      = "password"
+              , title     = "Password"
+              , value     = st.password
+              , inputType = HP.InputPassword
+              }) (HE.input ChangePassword)
+
+        , MHH.inputField12 [MHH.submitButton [] [HH.text "Sign in"]]
         ]
       ]
 
 eval :: forall m. MonadAff m
-     => Query ~> H.ParentDSL State Query MenuBar.Query Unit Void m
+     => Query ~> H.ParentDSL State Query ChildQuery ChildSlot Void m
 eval = case _ of
   ChangeEmail email next -> do
     H.modify_ (_ { email = email })
@@ -125,7 +127,7 @@ eval = case _ of
     pure next
 
 processError :: forall m. MonadAff m => API.APIError
-             -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+             -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
 processError = case _ of
   API.APIError _ msg _ mCode _ -> do
     let msg' = maybe msg API.humanReadableError mCode
