@@ -19,6 +19,7 @@ import           Control.Monad.MultiExcept
 import           Control.Monad.Reader
 
 import           Data.Aeson
+import           Data.Aeson.Types (Parser)
 import           Data.Functor.Identity (Identity)
 import           Data.Int (Int64)
 import           Data.List.NonEmpty
@@ -178,8 +179,19 @@ type instance ColumnType UserID = PGInt8
 
 deriving newtype instance QueryRunnerColumnDefault PGInt8 UserID
 deriving newtype instance FromHttpApiData UserID
-deriving newtype instance FromJSON UserID
-deriving newtype instance ToJSON UserID
+
+instance FromJSON UserID where
+  parseJSON = fmap UserID . parseID
+
+instance ToJSON UserID where
+  toJSON = toJSON . show . unUserID
 
 instance Default Constant UserID (Column PGInt8) where
   def = lmap unUserID def
+
+parseID :: Value -> Parser Int64
+parseID = withText "ID" $ \txt -> do
+  let str = T.unpack txt
+  case reads str of
+    (i,""):_ -> return i
+    _ -> fail $ "unreadable ID: " ++ show str

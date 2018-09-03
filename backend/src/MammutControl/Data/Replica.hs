@@ -38,8 +38,9 @@ type instance ColumnType ReplicaID = PGInt8
 
 deriving newtype instance QueryRunnerColumnDefault PGInt8 ReplicaID
 deriving newtype instance FromHttpApiData ReplicaID
-deriving newtype instance FromJSON ReplicaID
-deriving newtype instance ToJSON ReplicaID
+
+instance ToJSON ReplicaID where
+  toJSON = toJSON . show . unReplicaID
 
 instance Default Constant ReplicaID (Column PGInt8) where
   def = lmap unReplicaID def

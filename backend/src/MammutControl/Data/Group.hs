@@ -40,8 +40,9 @@ type instance ColumnType GroupID = PGInt8
 
 deriving newtype instance QueryRunnerColumnDefault PGInt8 GroupID
 deriving newtype instance FromHttpApiData GroupID
-deriving newtype instance FromJSON GroupID
-deriving newtype instance ToJSON GroupID
+
+instance ToJSON GroupID where
+  toJSON = toJSON . show . unGroupID
 
 instance Default Constant GroupID (Column PGInt8) where
   def = lmap unGroupID def

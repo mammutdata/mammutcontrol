@@ -38,8 +38,12 @@ type instance ColumnType WalletID = PGInt8
 
 deriving newtype instance QueryRunnerColumnDefault PGInt8 WalletID
 deriving newtype instance FromHttpApiData WalletID
-deriving newtype instance FromJSON WalletID
-deriving newtype instance ToJSON WalletID
+
+instance FromJSON WalletID where
+  parseJSON = fmap WalletID . parseID
+
+instance ToJSON WalletID where
+  toJSON = toJSON . show . unWalletID
 
 instance Default Constant WalletID (Column PGInt8) where
   def = lmap unWalletID def
