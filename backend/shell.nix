@@ -4,6 +4,8 @@ stdenv.mkDerivation {
   buildInputs = [
     haskell.compiler.ghc841
     haskellPackages.ghcid
+    haskellPackages.hpack
+    haskellPackages.morph
     postgresql
     zlib
   ];
