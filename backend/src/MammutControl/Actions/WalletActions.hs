@@ -8,11 +8,11 @@ import           Data.Aeson
 import qualified Data.Text as T
 
 import           MammutControl.Actions.Helpers
-import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
 
-getWalletsAction :: MonadAction m => UserID -> m [Wallet]
-getWalletsAction = getWalletsByUserID
+getWalletsAction :: MonadAction m => Session
+                 -> m (JSONWrapper "wallets" [Wallet])
+getWalletsAction = fmap JSONWrapper . getWalletsByUserID . sessionUserID
 
 data WalletData = WalletData T.Text (Maybe T.Text)
 

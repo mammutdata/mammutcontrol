@@ -17,7 +17,7 @@ import Data.Tuple (Tuple(..))
 
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
-import Effect.Console (log)
+import Effect.Console
 
 import Web.Event.Event (Event, preventDefault)
 
@@ -30,11 +30,13 @@ import Halogen.HTML.Properties as HP
 
 import MammutControl.API.GroupAPI as API
 import MammutControl.API.Helpers as API
+import MammutControl.API.WalletAPI as API
 import MammutControl.Components.Common.InputField as InputField
 import MammutControl.Components.Common.SelectField as SelectField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
+import MammutControl.Utils (redirect)
 
 type State =
   { error            :: forall p i. Maybe (HH.HTML p i)
@@ -42,7 +44,8 @@ type State =
   , nameError        :: Maybe String
   , description      :: String
   , descriptionError :: Maybe String
-  , walletID         :: Maybe Int
+  , walletID         :: Maybe API.WalletID
+  , wallets          :: Array API.Wallet
   }
 
 initialState :: State
@@ -53,6 +56,7 @@ initialState =
   , description: ""
   , descriptionError: Nothing
   , walletID: Nothing
+  , wallets: []
   }
 
 data Query a
@@ -122,12 +126,15 @@ renderForm st =
 
     , HH.slot' CP.cp4 unit SelectField.component
         (SelectField.defaultInput
-          { value       = "FIXME"
+          { value       = maybe "" API.unWalletID st.walletID
           , name        = "wallet_id"
           , title       = "Wallet"
           , description = "Optional default wallet to be charged when a backup\
                           \ is created in this group."
-          , options     = [Tuple "" "No wallet", Tuple "FIXME" "FIXME"]
+          , options     = Tuple "" "No wallet"
+                          : map (\(API.Wallet w) ->
+                                    Tuple (API.unWalletID w.id) w.name)
+                                st.wallets
           }) (HE.input ChangeWalletID)
 
     , MHH.inputField12 [MHH.submitButton [] [HH.text "Add"]]
@@ -145,17 +152,28 @@ eval = case _ of
     pure next
 
   ChangeWalletID str next -> do
-    liftEffect $ log "Hello"
---    let mwid = fromString $ str
---    H.modify_ (_ { walletID = mwid })
+    let mwid | str == "" = Nothing
+             | otherwise = Just $ API.WalletID str
+    H.modify_ (_ { walletID = mwid })
     pure next
 
   FormSubmitted event next -> do
     liftEffect $ preventDefault event
+    st <- H.get
+    response <- H.liftAff $ API.createGroup st
+    case response of
+      Left err -> processError err
+      Right (API.Group group) -> redirect $ "/groups/" <> API.unGroupID group.id
     pure next
 
   Init next -> do
     liftEffect MHH.initFormSelects
+    response <- H.liftAff API.getWallets
+    case response of
+      Left err -> processError err
+      Right wallets -> do
+        H.modify_ (_ { wallets = wallets })
+        liftEffect MHH.initFormSelects
     pure next
 
 processError :: forall m. MonadAff m => API.APIError

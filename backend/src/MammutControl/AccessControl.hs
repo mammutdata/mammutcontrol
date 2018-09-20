@@ -43,11 +43,11 @@ runAccessControlT action muid =
         Nothing  -> NotLoggedIn
   in flip runReaderT atyp $ unAccessControlT action
 
-deny :: MonadMultiError MCError m => Bool -> String -> AccessControlT m a
+deny :: MonadMultiError MCError m => Validity -> String -> AccessControlT m a
 deny validSession msg = throwError $ AccessDenied validSession msg
 
 notLoggedInError :: MonadMultiError MCError m => AccessControlT m a
-notLoggedInError = deny False "must be logged in"
+notLoggedInError = deny Invalid "must be logged in"
 
 guardSameUserID :: MonadMultiError MCError m => UserID -> String
                 -> AccessControlT m ()
@@ -56,7 +56,7 @@ guardSameUserID uid err = do
   case atyp of
     Passthrough -> return ()
     LoggedIn uid' | uid == uid' -> return ()
-                  | otherwise -> deny True err
+                  | otherwise -> deny Valid err
     NotLoggedIn -> notLoggedInError
 
 guardUserIDIn :: MonadMultiError MCError m => [UserID] -> String
@@ -66,7 +66,7 @@ guardUserIDIn uids err = do
   case atyp of
     Passthrough -> return ()
     LoggedIn uid | uid `elem` uids -> return ()
-                 | otherwise -> deny True err
+                 | otherwise -> deny Valid err
     NotLoggedIn -> notLoggedInError
 
 --guardLoggedIn :: MonadMultiError MCError m => AccessControlT m ()

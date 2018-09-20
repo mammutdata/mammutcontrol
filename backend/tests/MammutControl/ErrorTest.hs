@@ -31,6 +31,6 @@ toServantErrTests = testGroup "toServantErr"
   where
     authErr, invalidTokenErr, notFoundErr, internalErr :: MCError
     authErr = AuthenticationError "wrong password"
-    invalidTokenErr = AccessDenied False "invalid token"
+    invalidTokenErr = AccessDenied Invalid "invalid token"
     notFoundErr = ResourceNotFoundError RTUser "user with ID 1"
     internalErr = InternalError "internal error"

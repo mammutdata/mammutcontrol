@@ -82,8 +82,8 @@ instance HoistField a (Maybe a) where
 instance HoistField () (Maybe a) where
   hoistField () = Nothing
 
-instance HoistField a b => HoistField (Maybe a) (Maybe b) where
-  hoistField = fmap hoistField
+--instance {-# OVERLAPPABLE #-} (Functor f, HoistField a b) => HoistField (f a) (f b) where
+--  hoistField = fmap hoistField
 
 instance HoistField a (Column b)
     => HoistField (Maybe a) (Column (Nullable b)) where

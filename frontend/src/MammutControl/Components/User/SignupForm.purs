@@ -161,8 +161,7 @@ eval = case _ of
     st <- H.get
     when (st.password == st.passwordConfirmation) $ do
       H.modify_ (_ { error = Nothing })
-      response <- H.liftAff $
-        API.signup { name: st.name, email: st.email, password: st.password }
+      response <- H.liftAff $ API.signup st
       case response of
         Left err -> processError err
         Right _ -> pure unit

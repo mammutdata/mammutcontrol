@@ -61,6 +61,7 @@ library:
 
   dependencies:
     - aeson
+    - jose
     - monad-control
     - opaleye
     - optparse-applicative
@@ -87,7 +88,7 @@ tests:
   unit-tests:
     source-dirs: tests
     main:        Suite.hs
-    ghc-options: -threaded
+    ghc-options: -threaded -rtsopts -with-rtsopts=-K1k
     dependencies:
       - hedgehog
       - jose

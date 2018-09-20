@@ -12,7 +12,7 @@ import Data.Array ((:))
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 
-import Web.Event.Event (Event)
+import Web.Event.Event (Event, target)
 
 import Halogen as H
 import Halogen.HTML as HH
@@ -48,7 +48,7 @@ type State = { input :: Input }
 
 data Query a
   = ChangeInput Input a
-  | ChangeValue Event a
+  | ChangeValue String a
 
 component :: forall m. H.Component HH.HTML Query Input Message m
 component = H.component
@@ -64,7 +64,7 @@ render st = st.input.wrapper
       [ HH.select
           [ HP.name st.input.name
           , HP.id_ st.input.name
-          , HE.onChange (HE.input ChangeValue)
+          , HE.onValueChange (HE.input ChangeValue)
           ]
           (map (\(Tuple value title) ->
                   HH.option [ HP.selected (value == st.input.value)
@@ -82,6 +82,6 @@ eval = case _ of
     H.modify_ (_ { input = input })
     pure next
 
-  ChangeValue value next -> do
-    --H.raise value
+  ChangeValue str next -> do
+    H.raise str
     pure next

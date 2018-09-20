@@ -19,8 +19,11 @@ import           MammutControl.Data.Group
 import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
 
-getGroupsAction :: MonadAction m => Session -> m (ListWrapper "groups" Group)
-getGroupsAction = fmap ListWrapper . getGroupsByUserID . sessionUserID
+getGroupsAction :: MonadAction m => Session -> m (JSONWrapper "groups" [Group])
+getGroupsAction = fmap JSONWrapper . getGroupsByUserID . sessionUserID
+
+getGroupAction :: MonadAction m => GroupID -> m (JSONWrapper "group" Group)
+getGroupAction = undefined
 
 data GroupData = GroupData T.Text (Maybe T.Text) (Maybe WalletID)
 

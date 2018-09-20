@@ -18,11 +18,11 @@ import Data.Tuple (Tuple(..))
 
 import Foreign.Object as Obj
 
-import Network.HTTP.Affjax
-import Network.HTTP.Affjax.Request as RQ
-import Network.HTTP.Affjax.Response as RS
-import Network.HTTP.RequestHeader (RequestHeader(..))
-import Network.HTTP.StatusCode
+import Affjax
+import Affjax.RequestBody
+import Affjax.RequestHeader
+import Affjax.ResponseFormat
+import Affjax.StatusCode
 
 import Web.HTML (window)
 import Web.HTML.Location (setHref)
@@ -32,17 +32,31 @@ import Halogen.HTML as HH
 
 import MammutControl.Session
 
-get' :: forall a. RS.Response a -> URL -> Affjax a
-get' response url = do
+apiRequest :: forall a. (Request a -> Request a) -> ResponseFormat a -> URL
+           -> Aff (Response (Either ResponseFormatError a))
+apiRequest f respFmt url = do
   mToken <- liftEffect getToken
-  let request = defaultRequest { url = url }
-      request' = case mToken of
-        Nothing -> request
+  let req = defaultRequest { url = url, responseFormat = respFmt }
+      req' = case mToken of
+        Nothing -> req
         Just token ->
           let authorizationHeader =
                 RequestHeader "Authorization" ("Bearer " <> token)
-          in request { headers = authorizationHeader :  request.headers }
-  affjax response request'
+          in req { headers = authorizationHeader : req.headers }
+  request $ f req'
+
+apiGet :: forall a. ResponseFormat a -> URL
+       -> Aff (Response (Either ResponseFormatError a))
+apiGet = apiRequest \req -> req
+
+apiPost :: forall a. ResponseFormat a -> URL -> RequestBody
+        -> Aff (Response (Either ResponseFormatError a))
+apiPost respFmt url body =
+  let f req = req
+        { method  = Left POST
+        , content = Just body
+        }
+  in apiRequest f respFmt url
 
 data APIErrorCode
   -- access control errors
@@ -105,14 +119,15 @@ data APIError
   | MultipleAPIErrors StatusCode (Array APIError)
   | OtherError String
 
-unreadableError :: StatusCode -> APIError
-unreadableError status =
-  APIError status "unreadable error" Nothing Nothing Nothing
+unreadableError :: StatusCode -> String -> APIError
+unreadableError status msg =
+  APIError status ("Unreadable error: " <> msg) Nothing Nothing Nothing
 
 parseAPIErrorJSON :: StatusCode -> A.Json -> APIError
-parseAPIErrorJSON status = A.caseJsonObject (unreadableError status) \obj ->
+parseAPIErrorJSON status =
+  A.caseJsonObject (unreadableError status "expected object") \obj ->
     case Obj.lookup "error" obj >>= A.toString of
-      Nothing -> unreadableError status
+      Nothing -> unreadableError status "missing key \"error\""
       Just msg ->
         let mLoc = do
               field <- Obj.lookup "location" obj
@@ -129,40 +144,46 @@ parseAPIErrorJSON status = A.caseJsonObject (unreadableError status) \obj ->
     parseMultipleErrors :: Obj.Object A.Json -> APIError
     parseMultipleErrors obj =
       case Obj.lookup "errors" obj >>= A.toArray of
-        Nothing -> unreadableError status
+        Nothing -> unreadableError status "missing key \"errors\""
         Just values ->
           let errors = flip map values $ \value ->
-                A.caseJsonObject (unreadableError status)
+                A.caseJsonObject (unreadableError status "expected object")
                    (\obj' ->
                       case Obj.lookup "status_code" obj' >>= A.toNumber of
-                        Nothing -> unreadableError $ StatusCode 999
+                        Nothing -> unreadableError (StatusCode 999)
+                                                   "missing key \"status_code\""
                         Just status' ->
                           parseAPIErrorJSON (StatusCode (round status'))
                                             value)
                    value
           in MultipleAPIErrors status errors
 
-
-processResponse :: forall a. AffjaxResponse A.Json -> Aff (Either String a)
+processResponse :: forall a. Response (Either ResponseFormatError A.Json)
+                -> (Response A.Json -> Aff (Either String a))
                 -> Aff (Either APIError a)
-processResponse response action = do
+processResponse response f = do
   let StatusCode sc = response.status
-  if sc >= 400
-    then do
-      let err = parseAPIErrorJSON response.status response.response
-      case err of
-        APIError _ _ _ (Just InvalidToken) _ -> liftEffect $ do
-          clearToken
-          setHref "/" =<< location =<< window
-        _ -> pure unit
-      liftEffect $ logError err
-      pure $ Left err
+  case response.body of
+    Left formatError ->
+      pure $ Left $ unreadableError response.status
+                                    (printResponseFormatError formatError)
+    Right body -> do
+      if sc >= 400
+        then do
+          let err = parseAPIErrorJSON response.status body
+          case err of
+            APIError _ _ _ (Just InvalidToken) _ -> liftEffect $ do
+              clearToken
+              setHref "/" =<< location =<< window
+            _ -> pure unit
+          liftEffect $ logError err
+          pure $ Left err
 
-    else do
-      eRes <- action
-      pure $ case eRes of
-        Left err -> Left $ OtherError err
-        Right x  -> Right x
+        else do
+          res <- f response { body = body }
+          pure $ case res of
+            Left err -> Left $ OtherError err
+            Right x  -> Right x
 
 logError :: APIError -> Effect Unit
 logError = case _ of

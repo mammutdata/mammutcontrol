@@ -5,9 +5,8 @@ module MammutControl.Components.Group.ListGroups
 
 import Prelude
 
-import Data.Array (cons)
+import Data.Array ((:))
 import Data.Either (Either(..))
-import Data.List
 import Data.Maybe (Maybe(..))
 
 import Effect.Aff.Class (class MonadAff)
@@ -25,7 +24,7 @@ import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
 
 type State =
-  { groups :: Maybe (List API.Group)
+  { groups :: Maybe (Array API.Group)
   }
 
 initialState :: State
@@ -63,14 +62,46 @@ render st =
         ]
     ]
 
-renderGroups :: forall m. MonadAff m => List API.Group
+renderGroups :: forall m. MonadAff m => Array API.Group
              -> H.ParentHTML Query MenuBar.Query Unit m
-renderGroups Nil =
+renderGroups [] =
   HH.p_ [HH.text "You are not a member of any group yet."]
 renderGroups groups =
   HH.div_
-    [ HH.p_ [HH.text "This list shows you all the groups you are a member of."]
-    , HH.div_ [ HH.text "FIXME" ]
+    [ HH.p_ [HH.text "This list shows you all the groups of which you are a\
+                     \ member."]
+    , HH.table [HP.class_ (HH.ClassName "highlight")]
+        [ HH.thead_
+            [ HH.tr_
+                [ HH.td_ [HH.text "Name"]
+                , HH.td_ [HH.text "Description"]
+                , HH.td_ [HH.text "Linked to wallet"]
+                , HH.td_ [HH.text "Number of users"]
+                , HH.td_ [HH.text "Number of replicas"]
+                , HH.td_ []
+                ]
+            ]
+        , HH.tbody_ $ map renderGroupRow groups
+        ]
+    ]
+
+renderGroupRow :: forall m. MonadAff m => API.Group
+               -> H.ParentHTML Query MenuBar.Query Unit m
+renderGroupRow (API.Group group) =
+  HH.tr_
+    [ HH.td_ [HH.text group.name]
+    , HH.td_
+        [ case group.description of
+            Nothing -> HH.i_ [HH.text "No description given."]
+            Just str -> HH.text str
+        ]
+    , HH.td_ $ case group.walletID of
+        Nothing -> []
+        Just _ -> [MHH.icon "check"]
+    , HH.td_ [HH.text "0"]
+    , HH.td_ [HH.text "0"]
+    , HH.td_ [HH.a [HP.href ("#/groups/" <> API.unGroupID group.id)]
+        [MHH.icon "chevron_right"]]
     ]
 
 eval :: forall m. MonadAff m

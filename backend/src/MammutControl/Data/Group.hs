@@ -152,9 +152,21 @@ usersByGroupID = proc gid -> do
 createGroup :: (MonadMultiError MCError m, MonadGroup m, MonadTransaction m)
             => Group' Write -> UserID -> m Group
 createGroup group uid = withTransaction $ do
+  validateGroup $ hoistFields group
   group' <- createGroupNoOwner group
   addUserToGroup (groupID group') uid
   return group'
+
+validateGroup :: (MonadMultiError MCError m, MonadGroup m)
+              => Group' Maybe -> m ()
+validateGroup group = sequenceAll_
+  [ when (maybe False T.null (groupName group)) $
+      throwError $ ValidationError (Just ("name", CantBeEmpty))
+                                   "name can't be empty"
+  , when (maybe False T.null (join (groupDescription group))) $
+      throwError $ ValidationError (Just ("description", CantBeEmpty))
+                                   "description can't be empty"
+  ]
 
 class MonadGroup m where
   createGroupNoOwner  :: Group' Write -> m Group

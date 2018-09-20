@@ -8,6 +8,8 @@ import           Data.Pool (Pool, createPool)
 import           Data.Yaml
 import qualified Data.ByteString as BS
 
+import           Crypto.JOSE.JWK (JWK)
+
 import           System.Exit
 import           System.IO
 
@@ -17,6 +19,7 @@ import           Database.PostgreSQL.Simple ( ConnectInfo(..), Connection
 data Config = Config
   { configPort   :: Int
   , configDBInfo :: ConnectInfo
+  , configJWK    :: JWK
   }
 
 instance FromJSON Config where
@@ -30,6 +33,8 @@ instance FromJSON Config where
       <*> db .: "username"
       <*> db .: "password"
       <*> db .: "name"
+
+    configJWK <- obj .: "json_web_key"
 
     return Config{..}
 

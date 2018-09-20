@@ -63,7 +63,7 @@ createUserAction :: (MonadBase IO m, MonadAction m)
 createUserAction jwtSettings (UserCreationData email name password) = do
   let wallet = Wallet
         { walletID           = ()
-        , walletName         = "personal"
+        , walletName         = "Personal wallet (" <> email <> ")"
         , walletDescription  = Just "This wallet was automatically\
                                     \ created together with your\
                                     \ account."

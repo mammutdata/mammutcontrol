@@ -24,6 +24,7 @@ module MammutControl.HTMLHelpers
   , spinner
   , lightBand
   , initFormSelects
+  , icon
   ) where
 
 import Prelude
@@ -177,3 +178,6 @@ spinner =
 
 lightBand :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
 lightBand = HH.div [HP.class_ (HH.ClassName "white")]
+
+icon :: forall p i. String -> HH.HTML p i
+icon str = HH.i [HP.class_ (HH.ClassName "material-icons")] [HH.text str]

@@ -6,3 +6,6 @@ database:
   username: mammut
   password: mammut
   name: mammut
+json_web_key:
+  k: shPu7r9pz4aVN6-jcwtGy_P5UkWPgQqyczEX5qrijClVNljXinHYRrLXHexT7OXIOqBNjsWSIBuTIWisqW8w7NbpKGwi9u4BGt3o_gvY22RBVjc-_mrSsnBJgxsHTLzlVOT8u8ealYivTIgrxKI6eG7FW8zri1M4jEdy1FfpZ-qTUTJfQaJJ2liXIJXcR1Hb-JhZQJXJVPHIF2YQ4rSUWLuPKXx1nIhmXHbXPBTqJglGLaueV7R5PXXe_Df5KiPQERtRSY15vXlCn9xZd6AqUuyXszpb53pFU6-QwRloEpswXDAWRayLUaOcbsF5SOny9uFPTxuqvDDRQXqgckSpnQ
+  kty: oct

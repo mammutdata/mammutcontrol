@@ -2,6 +2,7 @@ module MammutControl.Error
   ( ResourceType(..)
   , ValidationType(..)
   , Constraint(..)
+  , Validity(..)
   , MCError(..)
   , toServantErr
   , WithJSONErrors(..)
@@ -56,12 +57,14 @@ constraintToText :: Constraint -> T.Text
 constraintToText = \case
   ConstraintGroupHasAtLeastOneMember -> "constraint_group_has_member"
 
+data Validity = Valid | Invalid deriving (Eq, Show)
+
 data MCError
   = ResourceNotFoundError ResourceType String
   | ValidationError (Maybe (T.Text, ValidationType)) String
   | AuthenticationError String
   | InternalError String
-  | AccessDenied Bool String
+  | AccessDenied Validity String
   | ConstraintCheckError Constraint
   deriving (Eq, Show)
 
@@ -91,9 +94,10 @@ toServantErr' = \case
                                (Just "authentication_error"))
     InternalError _ ->
       (err500, SingleJSONError "internal error" Nothing (Just "internal_error"))
-    AccessDenied validToken msg ->
-      let (code, typ) | validToken = (err403, "access_denied")
-                      | otherwise  = (err401, "invalid_token")
+    AccessDenied tokenValidity msg ->
+      let (code, typ) = case tokenValidity of
+            Valid   -> (err403, "access_denied")
+            Invalid -> (err401, "invalid_token")
       in (code, SingleJSONError (T.pack msg) Nothing (Just typ))
     ConstraintCheckError constraint ->
       (err400, SingleJSONError (humanReadableConstraint constraint) Nothing

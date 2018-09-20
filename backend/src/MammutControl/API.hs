@@ -6,6 +6,8 @@ module MammutControl.API
 
 import Data.List.NonEmpty
 
+import Crypto.JOSE.JWK (JWK)
+
 import Servant hiding (throwError)
 import Servant.Auth
 import Servant.Auth.Server
@@ -35,10 +37,10 @@ type AuthenticatedAPI =
           :> Put '[JSON] User
   :<|> "users" :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
 
-  :<|> "users" :> Capture "user_id" UserID :> "wallets" :> Get '[JSON] [Wallet]
+  :<|> "wallets" :> Get '[JSON] (JSONWrapper "wallets" [Wallet])
   :<|> "wallets" :> ReqBody '[JSON] WalletData :> PostCreated '[JSON] Wallet
 
-  :<|> "groups" :> Get '[JSON] (ListWrapper "groups" Group)
+  :<|> "groups" :> Get '[JSON] (JSONWrapper "groups" [Group])
   :<|> "groups" :> ReqBody '[JSON] GroupData :> PostCreated '[JSON] Group
   :<|> "groups" :> Capture "group_id" GroupID :> "users" :> Get '[JSON] [User]
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
@@ -56,7 +58,7 @@ authenticatedAPI session =
   editUserAction
   :<|> deleteUserAction
 
-  :<|> getWalletsAction
+  :<|> getWalletsAction session
   :<|> createWalletAction session
 
   :<|> getGroupsAction session
@@ -65,9 +67,8 @@ authenticatedAPI session =
   :<|> addUserToGroupAction
   :<|> removeUserFromGroupAction
 
-api :: Pool Connection -> IO Application
-api pool = do
-  key <- generateKey
+api :: JWK -> Pool Connection -> Application
+api key pool =
   let contextProxy = Proxy :: Proxy '[JWTSettings, CookieSettings]
 
       jwtSettings = defaultJWTSettings key
@@ -84,9 +85,9 @@ api pool = do
           (Proxy :: Proxy AuthenticatedAPI) contextProxy
           (runAction pool (Just session)) (authenticatedAPI session)
         _ -> throwAll $ toServantErr $
-               AccessDenied False "authentication required" :| []
+               AccessDenied Invalid "authentication required" :| []
 
       app = serveWithContext (Proxy :: Proxy (WithJSONErrors MammutControlAPI))
         context (unauthenticatedAPI' :<|> authenticatedAPI')
 
-  return app
+  in app

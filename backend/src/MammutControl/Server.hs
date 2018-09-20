@@ -10,6 +10,9 @@ import MammutControl.Options
 
 run :: IO ()
 run = do
+  hSetBuffering stdout LineBuffering
+  hSetBuffering stderr LineBuffering
+
   opts   <- getOptions
   config <- readConfigOrDie $ optsConfigPath opts
 
@@ -21,5 +24,5 @@ run = do
                             "Server listening on port " ++ show port) $
         setPort port defaultSettings
 
-  app <- api pool
+  let app = api (configJWK config) pool
   runSettings settings app

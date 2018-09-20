@@ -84,9 +84,9 @@ runAction pool mSession action = do
       Except.throwError $ toServantErr errs
     Right (Right res) -> return res
 
-newtype ListWrapper (key :: Symbol) a = ListWrapper [a]
+newtype JSONWrapper (key :: Symbol) a = JSONWrapper a
 
-instance (KnownSymbol key, ToJSON a) => ToJSON (ListWrapper key a) where
-  toJSON (ListWrapper xs) =
+instance (KnownSymbol key, ToJSON a) => ToJSON (JSONWrapper key a) where
+  toJSON (JSONWrapper xs) =
     let key = T.pack $ symbolVal' (proxy# :: Proxy# key)
     in object [ key .= xs ]

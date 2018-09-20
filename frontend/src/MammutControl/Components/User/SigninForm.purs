@@ -119,8 +119,7 @@ eval = case _ of
     liftEffect $ preventDefault event
     H.modify_ (_ { error = Nothing })
     st <- H.get
-    response <- H.liftAff $
-      API.signin { email: st.email, password: st.password }
+    response <- H.liftAff $ API.signin st
     case response of
       Left err -> processError err
       Right _ -> liftEffect $ window >>= location >>= setHash "/"

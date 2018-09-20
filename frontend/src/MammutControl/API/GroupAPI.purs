@@ -1,8 +1,9 @@
 module MammutControl.API.GroupAPI
   ( GroupID(..)
-  , WalletID(..)
+  , unGroupID
   , Group(..)
   , getGroups
+  , createGroup
   ) where
 
 import Prelude
@@ -10,29 +11,28 @@ import Prelude
 import Data.Argonaut
 import Data.Argonaut.Core
 import Data.Either (Either(..))
-import Data.List (List)
 import Data.Maybe (Maybe(..), maybe)
+import Data.String (null)
 import Data.Tuple (Tuple(..))
+
+import Foreign.Object as Obj
 
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 
-import Foreign.Object as Obj
-
-import Network.HTTP.Affjax
-import Network.HTTP.Affjax.Request as RQ
-import Network.HTTP.Affjax.Response as RS
-import Network.HTTP.StatusCode
+import Affjax
+import Affjax.RequestBody as RB
+import Affjax.ResponseFormat as RF
+import Affjax.StatusCode
 
 import MammutControl.API.Helpers
+import MammutControl.API.WalletAPI (WalletID)
 
-newtype WalletID = WalletID Int
+newtype GroupID = GroupID String
 
-instance decodeJsonWalletID :: DecodeJson WalletID where
-  decodeJson = map WalletID <<< decodeJson
-
-newtype GroupID = GroupID Int
+unGroupID :: GroupID -> String
+unGroupID (GroupID str) = str
 
 instance decodeJsonGroupID :: DecodeJson GroupID where
   decodeJson = map GroupID <<< decodeJson
@@ -53,11 +53,26 @@ instance decodeJsonGroup :: DecodeJson Group where
     walletID    <- obj .?? "wallet_id"
     pure $ Group { id, name, description, walletID }
 
-getGroups :: Aff (Either APIError (List Group))
+getGroups :: Aff (Either APIError (Array Group))
 getGroups = do
-  response <- get' RS.json "/api/groups"
-  processResponse response $ case response.status of
-    StatusCode 200 -> pure $ do
-      obj <- decodeJson response.response
+  response <- apiGet RF.json "/api/groups"
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 200 -> do
+      obj <- decodeJson resp.body
       obj .? "groups"
-    _ -> pure $ Left "Unknown error."
+    _ -> Left "Unknown error."
+
+createGroup :: { name :: String, description :: String
+               , walletID :: Maybe WalletID | _ }
+            -> Aff (Either APIError Group)
+createGroup group = do
+  let req = fromObject $ Obj.fromFoldable $
+        [ "name" := group.name
+        ] <> maybe [] (\wid -> ["wallet_id" := wid]) group.walletID
+          <> if null group.description
+               then []
+               else ["description" := group.description]
+  response <- apiPost RF.json "/api/groups" $ RB.json req
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 201 -> decodeJson resp.body
+    _ -> Left "Unknown error."

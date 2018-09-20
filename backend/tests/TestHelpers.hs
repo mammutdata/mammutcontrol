@@ -17,7 +17,6 @@ import           Control.Monad.State
 import           Data.List hiding (group)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Maybe
-import           Data.Semigroup
 import           Data.Time
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.Text as T
@@ -102,8 +101,8 @@ instance Monad m => MonadTime (FakeDataT m) where
 hashPasswordForTests :: Int -> BS8.ByteString -> PasswordHash
 hashPasswordForTests cost pwd =
   let salt = fromMaybe (error "salting") $ BCrypt.genSalt
-        (BCrypt.preferredHashAlgorithm passwordHashingPolicy)
-        cost "\DC3^\ACK\SOH\202\160\ENQ\EOT\167\145\145\nd{\208\144"
+        (BCrypt.preferredHashAlgorithm passwordHashingPolicy) cost
+        "randrandrandrand"
   in PasswordHash $ fromMaybe (error "hashing") $ BCrypt.hashPassword pwd salt
 
 passwordHashingCostForTests :: Int
@@ -196,6 +195,10 @@ instance Monad m => MonadGroup (FakeDataT m) where
         put (fdb { fdbGroups = groups' }, t)
       _ -> throwError $
         ConstraintCheckError ConstraintGroupHasAtLeastOneMember
+
+  getGroupsByUserID uid = do
+    (fdb, _) <- get
+    return $ map fst $ filter ((uid `elem`) . snd) (fdbGroups fdb)
 
   getUsersByGroupID gid = do
     (fdb, _) <- get
@@ -312,6 +315,7 @@ instance (Monad m, MonadGroup m) => MonadGroup (StubbedT m) where
   createGroupNoOwner = lift . createGroupNoOwner
   addUserToGroup gid uid = lift $ addUserToGroup gid uid
   removeUserFromGroup gid uid = lift $ removeUserFromGroup gid uid
+  getGroupsByUserID = lift . getGroupsByUserID
   getUsersByGroupID = lift . getUsersByGroupID
   deleteGroup = lift . deleteGroup
 
@@ -367,13 +371,13 @@ nameGen :: Gen T.Text
 nameGen = Gen.text (Range.linear 1 10) Gen.alphaNum
 
 descriptionGen :: Gen T.Text
-descriptionGen = Gen.text (Range.linear 1 1000) Gen.alphaNum
+descriptionGen = Gen.text (Range.linear 1 100) Gen.alphaNum
 
 assertAccessDenied :: MonadTest m => Either (NonEmpty MCError) a -> m ()
 assertAccessDenied = \case
   Left (err :| errs) -> do
     case err of
-      AccessDenied True _ -> success
+      AccessDenied Valid _ -> success
       _ -> annotateShow err >> failure
     annotateShow errs
     assert $ null errs

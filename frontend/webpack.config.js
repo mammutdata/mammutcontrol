@@ -23,7 +23,6 @@ module.exports = {
 
   entry: [
     "./src/loader.js",
-    "./node_modules/materialize-css/dist/js/materialize.js",
     "./css/main.scss"
   ],
 
