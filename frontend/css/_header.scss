@@ -6,7 +6,11 @@
 
 .header--underlined {
   padding-bottom: .68em;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #ccc;
+}
+
+.header--small {
+  font-size: 1.5rem;
 }
 
 .header__buttons {

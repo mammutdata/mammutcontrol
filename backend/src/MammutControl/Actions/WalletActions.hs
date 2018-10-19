@@ -1,5 +1,6 @@
 module MammutControl.Actions.WalletActions
-  ( getWalletsAction
+  ( getWalletAction
+  , getWalletsAction
   , WalletData
   , createWalletAction
   ) where
@@ -9,6 +10,9 @@ import qualified Data.Text as T
 
 import           MammutControl.Actions.Helpers
 import           MammutControl.Data.Wallet
+
+getWalletAction :: MonadAction m => WalletID -> m (JSONWrapper "wallet" Wallet)
+getWalletAction = fmap JSONWrapper . getWallet
 
 getWalletsAction :: MonadAction m => Session
                  -> m (JSONWrapper "wallets" [Wallet])
@@ -21,7 +25,8 @@ instance FromJSON WalletData where
     <$> obj .: "name"
     <*> obj .:? "description"
 
-createWalletAction :: MonadAction m => Session -> WalletData -> m Wallet
+createWalletAction :: MonadAction m => Session -> WalletData
+                   -> m (JSONWrapper "wallet" Wallet)
 createWalletAction session (WalletData name mDescription) = do
   let wallet = Wallet
         { walletID           = ()
@@ -30,4 +35,4 @@ createWalletAction session (WalletData name mDescription) = do
         , walletCredits      = ()
         , walletCreationTime = ()
         }
-  createWallet wallet (sessionUserID session)
+  JSONWrapper <$> createWallet wallet (sessionUserID session)

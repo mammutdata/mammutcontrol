@@ -20,11 +20,13 @@ module MammutControl.HTMLHelpers
   , errorCard
   , box
   , sectionTitle
+  , sectionTitle2
   , addButton
   , spinner
   , lightBand
   , initFormSelects
   , icon
+  , collection
   ) where
 
 import Prelude
@@ -155,6 +157,9 @@ box children =
 sectionTitle :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
 sectionTitle = HH.h1 [HP.class_ (HH.ClassName "header header--underlined")]
 
+sectionTitle2 :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
+sectionTitle2 = HH.h2 [HP.class_ (HH.ClassName "header header--small")]
+
 addButton :: forall p i. Array (HP.IProp H.HTMLa i) -> HH.HTML p i
 addButton props =
   HH.a
@@ -181,3 +186,8 @@ lightBand = HH.div [HP.class_ (HH.ClassName "white")]
 
 icon :: forall p i. String -> HH.HTML p i
 icon str = HH.i [HP.class_ (HH.ClassName "material-icons")] [HH.text str]
+
+collection :: forall p i. Array (HH.HTML p i) -> HH.HTML p i
+collection children =
+  HH.ul [HP.class_ (HH.ClassName "collection")]
+    (map (\c -> HH.li [HP.class_ (HH.ClassName "collection-item")] [c]) children)

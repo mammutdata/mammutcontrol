@@ -134,10 +134,9 @@ eval = case _ of
     pure next
 
   Init next -> do
-    eval $ BindSideNav unit
     mToken <- liftEffect getToken
     H.modify_ (_ { loggedIn = isJust mToken })
-    pure next
+    eval $ BindSideNav next
 
   Signout next -> do
     liftEffect do

@@ -24,7 +24,7 @@ import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
 
 type State =
-  { groups :: Maybe (Array API.Group)
+  { groups :: Maybe (Array API.GroupSummary)
   }
 
 initialState :: State
@@ -62,7 +62,7 @@ render st =
         ]
     ]
 
-renderGroups :: forall m. MonadAff m => Array API.Group
+renderGroups :: forall m. MonadAff m => Array API.GroupSummary
              -> H.ParentHTML Query MenuBar.Query Unit m
 renderGroups [] =
   HH.p_ [HH.text "You are not a member of any group yet."]
@@ -85,9 +85,9 @@ renderGroups groups =
         ]
     ]
 
-renderGroupRow :: forall m. MonadAff m => API.Group
+renderGroupRow :: forall m. MonadAff m => API.GroupSummary
                -> H.ParentHTML Query MenuBar.Query Unit m
-renderGroupRow (API.Group group) =
+renderGroupRow (API.GroupSummary (API.Group group) userCount replicaCount) =
   HH.tr_
     [ HH.td_ [HH.text group.name]
     , HH.td_
@@ -98,8 +98,8 @@ renderGroupRow (API.Group group) =
     , HH.td_ $ case group.walletID of
         Nothing -> []
         Just _ -> [MHH.icon "check"]
-    , HH.td_ [HH.text "0"]
-    , HH.td_ [HH.text "0"]
+    , HH.td_ [HH.text (show userCount)]
+    , HH.td_ [HH.text (show replicaCount)]
     , HH.td_ [HH.a [HP.href ("#/groups/" <> API.unGroupID group.id)]
         [MHH.icon "chevron_right"]]
     ]
@@ -114,6 +114,7 @@ eval = case _ of
       Right groups -> H.modify_ (_ { groups = Just groups })
     pure next
 
+-- FIXME: show error
 processError :: forall m. MonadAff m => API.APIError
              -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
 processError = case _ of

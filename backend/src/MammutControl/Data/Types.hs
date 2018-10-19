@@ -32,7 +32,7 @@ import qualified Data.Text as T
 import           Database.PostgreSQL.Simple ( Connection, begin, commit
                                             , rollback )
 
-import           Opaleye
+import           Opaleye hiding (Field)
 
 import           Servant (FromHttpApiData(..))
 
@@ -42,6 +42,7 @@ data TblCol a
 data Col a
 data WriteCol a
 data Write a
+data Aggregate a
 
 type family ColumnType a
 type instance ColumnType T.Text    = PGText
@@ -67,6 +68,8 @@ type family Field f req a where
   Field Write 'Optional a         = Maybe a
   Field Write 'Required a         = a
   Field Write 'ReadOnly a         = ()
+
+  Field Aggregate _ a = Aggregator (Column (ColumnType a)) (Column (ColumnType a))
 
   Field f _ a = f a
 

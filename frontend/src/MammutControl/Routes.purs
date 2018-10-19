@@ -26,12 +26,15 @@ import Halogen.HTML.Properties as HP
 
 import Routing.Match
 
+import MammutControl.API.GroupAPI (GroupID(..))
+
 data Route
   = Home
   | Signup
   | Signin
   | Groups
   | GroupsNew
+  | Group GroupID
 
 data Section
   = GroupSection
@@ -43,6 +46,7 @@ sectionFromRoute = case _ of
   Signin -> Nothing
   Groups -> Just GroupSection
   GroupsNew -> Just GroupSection
+  Group _ -> Just GroupSection
 
 routes :: Match Route
 routes = root *> oneOf
@@ -50,6 +54,7 @@ routes = root *> oneOf
   , Signin <$ lit "signin"
   -- Groups
   , GroupsNew <$ lit "groups" <* lit "new"
+  , (Group <<< GroupID) <$ lit "groups" <*> str
   , Groups <$ lit "groups"
   -- /
   , pure Home

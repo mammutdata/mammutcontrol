@@ -5,7 +5,9 @@ module MammutControl.Data.Replica
   , Replica'(..)
   , Replica
   , MonadReplica(..)
+  , replicaTable
   , replicaByID
+  , replicasByGroupID
   ) where
 
 import           Prelude hiding (null)
@@ -20,11 +22,11 @@ import           Data.Profunctor.Product.Default
 import           Data.Time (UTCTime)
 import qualified Data.Text as T
 
-import           Opaleye
+import           Opaleye hiding (Field)
 
 import           Servant (FromHttpApiData(..))
 
-import           MammutControl.Data.Group
+import           MammutControl.Data.Group.Schema
 import           MammutControl.Data.Types
 import           MammutControl.Data.Wallet
 
@@ -110,6 +112,12 @@ replicaByID :: QueryArr (Column (ColumnType ReplicaID)) (Replica' Col)
 replicaByID = proc uid -> do
   replica <- queryTable replicaTable -< ()
   restrict -< replicaID replica .== uid
+  returnA -< replica
+
+replicasByGroupID :: QueryArr (Column (ColumnType GroupID)) (Replica' Col)
+replicasByGroupID = proc gid -> do
+  replica <- queryTable replicaTable -< ()
+  restrict -< replicaGroupID replica .== gid
   returnA -< replica
 
 {-

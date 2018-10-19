@@ -82,14 +82,15 @@ instance FromJSON UserEditionData where
     <$> fmap (fmap TE.encodeUtf8) (obj .:? "password")
     <*> parseJSON (Object obj)
 
-editUserAction :: MonadAction m => UserID -> UserEditionData -> m User
+editUserAction :: MonadAction m => UserID -> UserEditionData
+               -> m (JSONWrapper "user" User)
 editUserAction uid (UserEditionData mPassword fields) = do
   fields' <- case mPassword of
     Nothing -> return fields
     Just pwd -> do
       hash <- hashPassword pwd
       return $ fields { userPasswordHash = Just hash }
-  editUser uid fields'
+  JSONWrapper <$> editUser uid fields'
 
 deleteUserAction :: MonadAction m => UserID -> m NoContent
 deleteUserAction uid = do

@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE CPP #-}
 
 module MammutControl.Actions.Helpers
   ( module MammutControl.Actions.Helpers
@@ -9,6 +10,11 @@ module MammutControl.Actions.Helpers
 
 import           GHC.Exts (Proxy#, proxy#)
 import           GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
+
+#ifdef SLOW
+import           Control.Concurrent (threadDelay)
+import           Control.Monad.Trans (liftIO)
+#endif
 
 import           Control.Monad (forM_)
 import           Control.Monad.Base
@@ -71,6 +77,9 @@ makeSessionToken jwtSettings user = do
 
 runAction :: Pool Connection -> Maybe Session -> Action a -> Handler a
 runAction pool mSession action = do
+#ifdef SLOW
+  liftIO $ threadDelay $ 1000000
+#endif
   eRes <- liftBase $ E.try $ flip runDataM pool $ withTransaction $
     runAccessControlT action (sessionUserID <$> mSession)
   case eRes of

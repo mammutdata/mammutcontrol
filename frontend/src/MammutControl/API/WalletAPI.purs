@@ -2,6 +2,7 @@ module MammutControl.API.WalletAPI
   ( WalletID(..)
   , unWalletID
   , Wallet(..)
+  , getWallet
   , getWallets
   ) where
 
@@ -49,6 +50,15 @@ instance decodeJsonWallet :: DecodeJson Wallet where
     description <- obj .?? "description"
     credits     <- obj .? "credits"
     pure $ Wallet { id, name, description, credits }
+
+getWallet :: WalletID -> Aff (Either APIError Wallet)
+getWallet wid = do
+  response <- apiGet RF.json $ "/api/wallets/" <> unWalletID wid
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 200 -> do
+      obj <- decodeJson resp.body
+      obj .? "wallet"
+    _ -> Left "Unknown error."
 
 getWallets :: Aff (Either APIError (Array Wallet))
 getWallets = do

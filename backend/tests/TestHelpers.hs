@@ -36,6 +36,7 @@ import           Test.Tasty.Hedgehog
 import           MammutControl.AccessControl
 import           MammutControl.Actions.UserActions
 import           MammutControl.Data.Group
+import           MammutControl.Data.Replica
 import           MammutControl.Data.Types
 import           MammutControl.Data.User
 import           MammutControl.Data.Wallet
@@ -45,22 +46,26 @@ once :: Property -> Property
 once = withTests 1
 
 data FakeDB = FakeDB
-  { fdbNextUserID   :: Int64
-  , fdbUsers        :: [User]
-  , fdbNextGroupID  :: Int64
-  , fdbGroups       :: [(Group, [UserID])]
-  , fdbNextWalletID :: Int64
-  , fdbWallets      :: [(Wallet, [UserID])]
+  { fdbNextUserID    :: Int64
+  , fdbUsers         :: [User]
+  , fdbNextGroupID   :: Int64
+  , fdbGroups        :: [(Group, [UserID])]
+  , fdbNextWalletID  :: Int64
+  , fdbWallets       :: [(Wallet, [UserID])]
+  , fdbNextReplicaID :: Int64
+  , fdbReplicas      :: [Replica]
   }
 
 emptyFakeDB :: FakeDB
 emptyFakeDB = FakeDB
-  { fdbNextUserID   = 1
-  , fdbUsers        = []
-  , fdbNextGroupID  = 1
-  , fdbGroups       = []
-  , fdbNextWalletID = 1
-  , fdbWallets      = []
+  { fdbNextUserID    = 1
+  , fdbUsers         = []
+  , fdbNextGroupID   = 1
+  , fdbGroups        = []
+  , fdbNextWalletID  = 1
+  , fdbWallets       = []
+  , fdbNextReplicaID = 1
+  , fdbReplicas      = []
   }
 
 newtype FakeDataT m a
@@ -162,6 +167,13 @@ instance Monad m => MonadUser (FakeDataT m) where
       ((), fdb { fdbUsers = filter ((/=uid) . userID) (fdbUsers fdb) })
 
 instance Monad m => MonadGroup (FakeDataT m) where
+  getGroup gid = do
+    (fdb, _) <- get
+    case find ((==gid) . groupID) (map fst (fdbGroups fdb)) of
+      Just group -> return group
+      Nothing -> throwError $
+        ResourceNotFoundError RTGroup $ "group #" ++ show (unGroupID gid)
+
   createGroupNoOwner group = do
     (_, t) <- get
     gid <- modifyFakeDB $ \fdb ->
@@ -198,7 +210,12 @@ instance Monad m => MonadGroup (FakeDataT m) where
 
   getGroupsByUserID uid = do
     (fdb, _) <- get
-    return $ map fst $ filter ((uid `elem`) . snd) (fdbGroups fdb)
+    let groups = filter ((uid `elem`) . snd) (fdbGroups fdb)
+    return $ flip map groups $ \(group, uids) ->
+      let replicaCount = fromIntegral . length $
+            filter ((==groupID group) . replicaGroupID) (fdbReplicas fdb)
+          userCount = fromIntegral $ length uids
+      in GroupSummary group userCount replicaCount
 
   getUsersByGroupID gid = do
     (fdb, _) <- get
@@ -312,6 +329,7 @@ instance (Monad m, MonadUser m) => MonadUser (StubbedT m) where
   deleteUser = lift . deleteUser
 
 instance (Monad m, MonadGroup m) => MonadGroup (StubbedT m) where
+  getGroup = lift . getGroup
   createGroupNoOwner = lift . createGroupNoOwner
   addUserToGroup gid uid = lift $ addUserToGroup gid uid
   removeUserFromGroup gid uid = lift $ removeUserFromGroup gid uid

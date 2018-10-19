@@ -1,5 +1,8 @@
 module MammutControl.API.UserAPI
-  ( signin
+  ( UserID(..)
+  , unUserID
+  , User(..)
+  , signin
   , signup
   ) where
 
@@ -24,6 +27,26 @@ import Affjax.StatusCode
 
 import MammutControl.API.Helpers
 import MammutControl.Session
+
+newtype UserID = UserID String
+
+unUserID :: UserID -> String
+unUserID (UserID uid) = uid
+
+instance decodeJsonUserID :: DecodeJson UserID where
+  decodeJson = map UserID <<< decodeJson
+
+data User = User
+  { userID :: UserID
+  , email  :: String
+  }
+
+instance decodeJsonUser :: DecodeJson User where
+  decodeJson json = do
+    obj <- decodeJson json
+    userID <- obj .? "id"
+    email  <- obj .? "email"
+    pure $ User { userID, email }
 
 signin :: { email :: String, password :: String | _ }
        -> Aff (Either APIError Unit)

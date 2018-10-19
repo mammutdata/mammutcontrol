@@ -11,9 +11,12 @@ import Data.Array
 import Data.Argonaut.Core as A
 import Data.Either
 import Data.Foldable (for_)
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
 import Data.HTTP.Method (Method(..))
 import Data.Int (round)
 import Data.Maybe (Maybe(..), maybe)
+import Data.Show (class Show)
 import Data.Tuple (Tuple(..))
 
 import Foreign.Object as Obj
@@ -75,6 +78,11 @@ data APIErrorCode
   | InternalError
   | MultipleErrors
 
+derive instance genericAPIErrorCode :: Generic APIErrorCode _
+
+instance showAPIErrorCode :: Show APIErrorCode where
+  show = genericShow
+
 stringToAPIErrorCode :: String -> Maybe APIErrorCode
 stringToAPIErrorCode = case _ of
   "authentication_error" -> Just AuthenticationError
@@ -118,6 +126,11 @@ data APIError
              (Maybe APIErrorCode) (Maybe String)
   | MultipleAPIErrors StatusCode (Array APIError)
   | OtherError String
+
+derive instance genericAPIError :: Generic APIError _
+
+instance showAPIError :: Show APIError where
+  show x = genericShow x
 
 unreadableError :: StatusCode -> String -> APIError
 unreadableError status msg =

@@ -84,6 +84,11 @@ instance MonadAccessControl (AccessControlT m) where
 
 instance (MonadMultiError MCError m, MonadGroup m, MonadWallet m)
     => MonadGroup (AccessControlT m) where
+  getGroup gid = do
+    void $ guardMemberOfGroup gid $
+      "can't get group with ID " ++ show (unGroupID gid)
+    lift $ getGroup gid
+
   createGroupNoOwner group = do
     case groupWalletID group of
       Nothing  -> return ()

@@ -34,17 +34,25 @@ type UnauthenticatedAPI =
 
 type AuthenticatedAPI =
   "users" :> Capture "user_id" UserID :> ReqBody '[JSON] UserEditionData
-          :> Put '[JSON] User
+          :> Put '[JSON] (JSONWrapper "user" User)
   :<|> "users" :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
 
   :<|> "wallets" :> Get '[JSON] (JSONWrapper "wallets" [Wallet])
-  :<|> "wallets" :> ReqBody '[JSON] WalletData :> PostCreated '[JSON] Wallet
+  :<|> "wallets" :> Capture "wallet_id" WalletID
+                 :> Get '[JSON] (JSONWrapper "wallet" Wallet)
+  :<|> "wallets" :> ReqBody '[JSON] WalletData
+                 :> PostCreated '[JSON] (JSONWrapper "wallet" Wallet)
 
-  :<|> "groups" :> Get '[JSON] (JSONWrapper "groups" [Group])
-  :<|> "groups" :> ReqBody '[JSON] GroupData :> PostCreated '[JSON] Group
-  :<|> "groups" :> Capture "group_id" GroupID :> "users" :> Get '[JSON] [User]
+  :<|> "groups" :> Get '[JSON] (JSONWrapper "groups" [GroupSummary])
+  :<|> "groups" :> Capture "group_id" GroupID
+                :> Get '[JSON] (JSONWrapper "group" Group)
+  :<|> "groups" :> ReqBody '[JSON] GroupData
+                :> PostCreated '[JSON] (JSONWrapper "group" Group)
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
-                :> ReqBody '[JSON] GroupMembershipData :> Post '[JSON] [User]
+                :> Get '[JSON] (JSONWrapper "users" [User])
+  :<|> "groups" :> Capture "group_id" GroupID :> "users"
+                :> ReqBody '[JSON] GroupMembershipData
+                :> Post '[JSON] (JSONWrapper "users" [User])
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
                 :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
 
@@ -59,9 +67,11 @@ authenticatedAPI session =
   :<|> deleteUserAction
 
   :<|> getWalletsAction session
+  :<|> getWalletAction
   :<|> createWalletAction session
 
   :<|> getGroupsAction session
+  :<|> getGroupAction
   :<|> createGroupAction session
   :<|> getMembersOfGroupAction
   :<|> addUserToGroupAction

@@ -20,7 +20,7 @@ import           Data.Profunctor.Product.Default
 import           Data.Time
 import qualified Data.Text as T
 
-import           Opaleye
+import           Opaleye hiding (Field)
 
 import           Servant (FromHttpApiData(..))
 

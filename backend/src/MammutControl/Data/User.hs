@@ -35,7 +35,7 @@ import qualified Data.Text as T
 
 import qualified Crypto.BCrypt as BCrypt
 
-import           Opaleye
+import           Opaleye hiding (Field)
 
 import           MammutControl.AccessControl.Class
 import           MammutControl.Data.Types
