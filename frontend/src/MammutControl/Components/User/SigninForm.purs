@@ -129,13 +129,13 @@ processError :: forall m. MonadAff m => API.APIError
              -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
 processError = case _ of
   API.APIError _ msg _ mCode _ -> do
-    let msg' = maybe msg API.humanReadableError mCode
+    let msg' = maybe msg API.humanReadableErrorCode mCode
     H.modify_ (_ { error = Just (HH.text msg') })
 
   API.MultipleAPIErrors _ errors -> do
     let step acc = case _ of
           API.APIError _ msg _ mCode _ -> do
-            let msg' = maybe msg API.humanReadableError mCode
+            let msg' = maybe msg API.humanReadableErrorCode mCode
             pure $ msg' : acc
           API.MultipleAPIErrors _ _ -> do
             liftEffect $
@@ -147,7 +147,7 @@ processError = case _ of
     case msgs of
       [] -> pure unit
       _ -> do
-        let msgList = API.humanReadableErrorList msgs
+        let msgList = API.errorsHTML msgs
         H.modify_ (_ { error = Just msgList })
 
   API.OtherError msg -> H.modify_ (_ { error = Just (HH.text msg) })

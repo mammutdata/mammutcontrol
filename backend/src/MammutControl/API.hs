@@ -54,7 +54,8 @@ type AuthenticatedAPI =
                 :> ReqBody '[JSON] GroupMembershipData
                 :> Post '[JSON] (JSONWrapper "users" [User])
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
-                :> Capture "user_id" UserID :> DeleteNoContent '[JSON] NoContent
+                :> Capture "user_id" UserID
+                :> Delete '[JSON] (JSONWrapper "users" [User])
 
 unauthenticatedAPI :: JWTSettings -> ServerT UnauthenticatedAPI Action
 unauthenticatedAPI jwtSettings =

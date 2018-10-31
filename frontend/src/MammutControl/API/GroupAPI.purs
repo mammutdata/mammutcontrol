@@ -7,6 +7,7 @@ module MammutControl.API.GroupAPI
   , getGroups
   , createGroup
   , getMembersOfGroup
+  , removeMemberFromGroup
   ) where
 
 import Prelude
@@ -30,7 +31,7 @@ import Affjax.ResponseFormat as RF
 import Affjax.StatusCode
 
 import MammutControl.API.Helpers
-import MammutControl.API.UserAPI (User)
+import MammutControl.API.UserAPI (User, UserID, unUserID)
 import MammutControl.API.WalletAPI (WalletID)
 
 newtype GroupID = GroupID String
@@ -105,6 +106,16 @@ createGroup group = do
 getMembersOfGroup :: GroupID -> Aff (Either APIError (Array User))
 getMembersOfGroup gid = do
   response <- apiGet RF.json $ "/api/groups/" <> unGroupID gid <> "/users"
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 200 -> do
+      obj <- decodeJson resp.body
+      obj .? "users"
+    _ -> Left "Unknown error."
+
+removeMemberFromGroup :: GroupID -> UserID -> Aff (Either APIError (Array User))
+removeMemberFromGroup gid uid = do
+  response <- apiDelete RF.json $
+    "/api/groups/" <> unGroupID gid <> "/users/" <> unUserID uid
   processResponse response \resp -> pure $ case resp.status of
     StatusCode 200 -> do
       obj <- decodeJson resp.body

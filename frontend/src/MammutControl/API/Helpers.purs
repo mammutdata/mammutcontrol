@@ -61,6 +61,10 @@ apiPost respFmt url body =
         }
   in apiRequest f respFmt url
 
+apiDelete :: forall a. ResponseFormat a -> URL
+          -> Aff (Response (Either ResponseFormatError a))
+apiDelete = apiRequest \req -> req { method = Left DELETE }
+
 data APIErrorCode
   -- access control errors
   = AuthenticationError
@@ -74,6 +78,8 @@ data APIErrorCode
   | UserNotFound
   | GroupNotFound
   | ReplicaNotFound
+  -- constraint not satisfied
+  | UnsatisfiedConstraintGroupHasMember
   -- general errors
   | InternalError
   | MultipleErrors
@@ -96,10 +102,11 @@ stringToAPIErrorCode = case _ of
   "replica_not_found"    -> Just ReplicaNotFound
   "internal_error"       -> Just InternalError
   "multiple_errors"      -> Just MultipleErrors
-  str                    -> Nothing
+  "constraint_group_has_member" -> Just UnsatisfiedConstraintGroupHasMember
+  str -> Nothing
 
-humanReadableError :: APIErrorCode -> String
-humanReadableError = case _ of
+humanReadableErrorCode :: APIErrorCode -> String
+humanReadableErrorCode = case _ of
   AuthenticationError ->
     "The authentication failed. Please check your credentials."
   InvalidToken        ->
@@ -113,10 +120,20 @@ humanReadableError = case _ of
   ReplicaNotFound     -> "The replica could not be found."
   InternalError       -> "An internal error occured."
   MultipleErrors      -> "Multiple errors occured."
+  UnsatisfiedConstraintGroupHasMember ->
+    "The last member of a group can't be removed. Please delete the group instead."
 
-humanReadableErrorList :: forall p i. Array String -> HH.HTML p i
-humanReadableErrorList [err] = HH.text err
-humanReadableErrorList errs = HH.p_
+humanReadableError :: APIError -> Array String
+humanReadableError = case _ of
+  APIError _ _ (Just _) _ _ -> []
+  APIError _ _ _ (Just code) _ -> [humanReadableErrorCode code]
+  APIError _ msg _ _ _ -> [msg]
+  MultipleAPIErrors _ errs -> concatMap humanReadableError errs
+  OtherError msg -> [msg]
+
+errorsHTML :: forall p i. Array String -> HH.HTML p i
+errorsHTML [err] = HH.text err
+errorsHTML errs = HH.p_
   [ HH.text "Multiple errors were returned:"
   , HH.ul_ $ flip map errs $ \err -> HH.li_ [ HH.text err ]
   ]

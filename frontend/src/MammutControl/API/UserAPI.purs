@@ -11,6 +11,7 @@ import Prelude
 import Data.Argonaut
 import Data.Argonaut.Core as A
 import Data.Either (Either(..))
+import Data.Eq (class Eq)
 import Data.Maybe (Maybe(..), maybe)
 import Data.Tuple (Tuple(..))
 
@@ -33,20 +34,22 @@ newtype UserID = UserID String
 unUserID :: UserID -> String
 unUserID (UserID uid) = uid
 
+derive instance eqUserID :: Eq UserID
+
 instance decodeJsonUserID :: DecodeJson UserID where
   decodeJson = map UserID <<< decodeJson
 
 data User = User
-  { userID :: UserID
-  , email  :: String
+  { id    :: UserID
+  , email :: String
   }
 
 instance decodeJsonUser :: DecodeJson User where
   decodeJson json = do
-    obj <- decodeJson json
-    userID <- obj .? "id"
-    email  <- obj .? "email"
-    pure $ User { userID, email }
+    obj   <- decodeJson json
+    id    <- obj .? "id"
+    email <- obj .? "email"
+    pure $ User { id, email }
 
 signin :: { email :: String, password :: String | _ }
        -> Aff (Either APIError Unit)

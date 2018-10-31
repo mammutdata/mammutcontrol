@@ -5,7 +5,7 @@ module MammutControl.Components.Group.ShowGroup
 
 import Prelude
 
-import Data.Array ((:))
+import Data.Array ((:), filter, null)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), maybe)
 
@@ -13,6 +13,9 @@ import Effect.Class (liftEffect)
 import Effect.Console
 import Effect.Aff (parallel, sequential)
 import Effect.Aff.Class (class MonadAff)
+
+import Web.Event.Event (preventDefault)
+import Web.UIEvent.MouseEvent (MouseEvent, toEvent)
 
 import Halogen as H
 import Halogen.Aff as HA
@@ -29,7 +32,8 @@ import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
 
 type State =
-  { groupID :: API.GroupID
+  { error   :: forall p i. Maybe (HH.HTML p i)
+  , groupID :: API.GroupID
   , group   :: Maybe API.Group
   , wallet  :: Maybe API.Wallet
   , users   :: Maybe (Array API.User)
@@ -37,7 +41,8 @@ type State =
 
 initialState :: API.GroupID -> State
 initialState groupID =
-  { groupID
+  { error: Nothing
+  , groupID
   , group: Nothing
   , wallet: Nothing
   , users: Nothing
@@ -46,6 +51,7 @@ initialState groupID =
 data Query a
   = FetchGroup a
   | ChangeGroup API.GroupID a
+  | RemoveMember API.UserID MouseEvent a
 
 component :: forall m. MonadAff m
           => H.Component HH.HTML Query API.GroupID Void m
@@ -64,7 +70,10 @@ render st =
   HH.div_
     [ HH.slot unit MenuBar.component { route: Groups } absurd
     , HH.div [HP.classes [MHH.container, MHH.section]]
-        [ MHH.sectionTitle
+        [ case st.error of
+            Nothing -> HH.text ""
+            Just errHTML -> MHH.errorCard [errHTML]
+        , MHH.sectionTitle
             [ HH.text "Group "
             , HH.em_ [HH.text (maybe "" (\(API.Group g) -> g.name) st.group)]
             ]
@@ -101,13 +110,25 @@ renderGroup st (API.Group group) = HH.div_
   , MHH.sectionTitle2 [HH.text "Members"]
   , case st.users of
       Nothing -> MHH.spinner
-      Just users -> MHH.collection (map (\(API.User u) -> HH.text (u.email)) users)
+      Just users -> MHH.collection (map renderUser users)
+  ]
+
+renderUser :: forall m. MonadAff m => API.User
+           -> H.ParentHTML Query MenuBar.Query Unit m
+renderUser (API.User user) = HH.div_
+  [ HH.text user.email
+  , HH.a [ HP.class_ (HH.ClassName "secondary-content")
+         , HE.onClick (HE.input (RemoveMember user.id))
+         , HP.href "#"
+         ]
+      [MHH.icon "remove"]
   ]
 
 eval :: forall m. MonadAff m
      => Query ~> H.ParentDSL State Query MenuBar.Query Unit Void m
 eval = case _ of
     FetchGroup next -> do
+      clearError
       st <- H.get
       response <- H.liftAff $ API.getGroup st.groupID
       case response of
@@ -124,7 +145,20 @@ eval = case _ of
       H.modify_ (_ { groupID = gid })
       eval $ FetchGroup next
 
+    RemoveMember uid event next -> do
+      clearError
+      liftEffect $ preventDefault $ toEvent event
+      st <- H.get
+      let users' = filter (\(API.User u) -> u.id /= uid) <$> st.users
+      H.modify_ (_ { users = users' })
+      removeMember st.groupID uid
+      pure next
+
   where
+    clearError :: forall m. MonadAff m
+               => H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+    clearError = H.modify_ (_ { error = Nothing })
+
     fetchWallet :: forall m. MonadAff m => API.WalletID
                 -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
     fetchWallet wid = do
@@ -139,11 +173,22 @@ eval = case _ of
       response <- H.liftAff $ API.getMembersOfGroup gid
       case response of
         Left err -> processError err
-        Right users -> do
-          liftEffect (log "hello")
-          H.modify_ (_ { users = Just users })
+        Right users -> H.modify_ (_ { users = Just users })
+
+    removeMember :: forall m. MonadAff m => API.GroupID -> API.UserID
+                 -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
+    removeMember gid uid = do
+      response <- H.liftAff $ API.removeMemberFromGroup gid uid
+      case response of
+        Left err -> do
+          processError err
+          fetchUsers gid
+        Right users -> H.modify_ (_ { users = Just users })
 
 processError :: forall m. MonadAff m => API.APIError
              -> H.ParentDSL State Query MenuBar.Query Unit Void m Unit
-processError = case _ of
-  err -> liftEffect $ log $ show err
+processError err = do
+  let strs = API.humanReadableError err
+  if null strs
+    then pure unit
+    else H.modify_ (_ { error = Just $ API.errorsHTML strs })

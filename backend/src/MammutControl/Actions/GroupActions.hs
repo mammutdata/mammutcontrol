@@ -12,8 +12,6 @@ module MammutControl.Actions.GroupActions
 import           Data.Aeson
 import qualified Data.Text as T
 
-import           Servant
-
 import           MammutControl.AccessControl
 import           MammutControl.Actions.Helpers
 import           MammutControl.Data.Group
@@ -64,7 +62,8 @@ addUserToGroupAction gid (GroupMembershipData email) = do
   addUserToGroup gid (userID user)
   JSONWrapper <$> getUsersByGroupID gid
 
-removeUserFromGroupAction :: MonadAction m => GroupID -> UserID -> m NoContent
+removeUserFromGroupAction :: MonadAction m => GroupID -> UserID
+                          -> m (JSONWrapper "users" [User])
 removeUserFromGroupAction gid uid = do
   removeUserFromGroup gid uid
-  return NoContent
+  getMembersOfGroupAction gid
