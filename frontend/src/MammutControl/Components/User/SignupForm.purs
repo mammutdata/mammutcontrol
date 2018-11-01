@@ -17,6 +17,9 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 
 import Web.Event.Event (Event, preventDefault)
+import Web.HTML (window)
+import Web.HTML.Location (setHash)
+import Web.HTML.Window (location)
 
 import Halogen as H
 import Halogen.Aff as HA
@@ -164,7 +167,7 @@ eval = case _ of
       response <- H.liftAff $ API.signup st
       case response of
         Left err -> processError err
-        Right _ -> pure unit
+        Right _ -> liftEffect $ window >>= location >>= setHash "/"
     pure next
 
 processError :: forall m. MonadAff m => API.APIError

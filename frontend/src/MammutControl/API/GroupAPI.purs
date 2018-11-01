@@ -8,6 +8,7 @@ module MammutControl.API.GroupAPI
   , createGroup
   , getMembersOfGroup
   , removeMemberFromGroup
+  , addMemberToGroup
   ) where
 
 import Prelude
@@ -116,6 +117,17 @@ removeMemberFromGroup :: GroupID -> UserID -> Aff (Either APIError (Array User))
 removeMemberFromGroup gid uid = do
   response <- apiDelete RF.json $
     "/api/groups/" <> unGroupID gid <> "/users/" <> unUserID uid
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 200 -> do
+      obj <- decodeJson resp.body
+      obj .? "users"
+    _ -> Left "Unknown error."
+
+addMemberToGroup :: GroupID -> String -> Aff (Either APIError (Array User))
+addMemberToGroup gid email = do
+  let url = "/api/groups/" <> unGroupID gid <> "/users"
+      req = fromObject $ Obj.fromFoldable ["email" := email]
+  response <- apiPost RF.json url $ RB.json req
   processResponse response \resp -> pure $ case resp.status of
     StatusCode 200 -> do
       obj <- decodeJson resp.body
