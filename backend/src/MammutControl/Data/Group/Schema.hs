@@ -138,9 +138,8 @@ groupByID = proc gid -> do
 
 groupsByUserID :: QueryArr (Column (ColumnType UserID)) (Group' Col)
 groupsByUserID = proc uid -> do
-  group <- queryTable groupTable -< ()
-  restrictExists gmsByUserID -< uid
-  returnA -< group
+  gm <- gmsByUserID -< uid
+  groupByID -< gmGroupID gm
 
 usersByGroupID :: QueryArr (Column (ColumnType GroupID)) (User' Col)
 usersByGroupID = proc gid -> do
