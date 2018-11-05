@@ -34,6 +34,7 @@ import MammutControl.Components.Common.InputField as InputField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
+import MammutControl.Utils (redirect)
 
 type State =
   { error   :: forall p i. Maybe (HH.HTML p i)
@@ -60,6 +61,7 @@ data Query a
   | RemoveMember API.UserID MouseEvent a
   | ChangeEmail String a
   | FormSubmitted Event a
+  | DeleteGroup a
 
 type ChildQuery = Coproduct2 MenuBar.Query InputField.Query
 type ChildSlot = Either2 Unit Unit
@@ -132,6 +134,23 @@ renderGroup st (API.Group group) = HH.div_
             }) (HE.input ChangeEmail)
       , MHH.inputField6 [MHH.submitButton [] [HH.text "Add new member"]]
       ]
+
+  , MHH.deleteButton [HH.ClassName "modal-trigger"] [HP.href "#delete-modal"]
+      [HH.text "Delete group"]
+  , HH.div [ HP.id_ "delete-modal"
+           , HP.class_ (HH.ClassName "modal bottom-sheet")
+           ]
+      [ HH.div [HP.class_ (HH.ClassName "modal-content")]
+          [ HH.text "Do you confirm you want to delete the group "
+          , HH.em_ [HH.text group.name]
+          , HH.text "?"
+          ]
+      , HH.div [HP.class_ (HH.ClassName "modal-footer")]
+          [ MHH.deleteButton [HH.ClassName "modal-close"]
+              [ HE.onClick (HE.input_ DeleteGroup) ]
+              [ HH.text "Delete" ]
+          ]
+      ]
   ]
 
 renderUser :: forall m. MonadAff m => API.User
@@ -156,6 +175,7 @@ eval = case _ of
         Left err -> processError err
         Right group@(API.Group groupObj) -> do
           H.modify_ (_ { group = Just group })
+          liftEffect MHH.initModals
           case groupObj.walletID of
             Nothing -> fetchUsers groupObj.id
             Just wid -> sequential $
@@ -184,6 +204,12 @@ eval = case _ of
       liftEffect $ preventDefault event
       st <- H.get
       addMember st.groupID st.email
+      pure next
+
+    DeleteGroup next -> do
+      clearErrors
+      st <- H.get
+      deleteGroup st.groupID
       pure next
 
   where
@@ -224,6 +250,14 @@ eval = case _ of
       case response of
         Left err -> processError err
         Right users -> H.modify_ (_ { email = "", users = Just users })
+
+    deleteGroup :: forall m. MonadAff m => API.GroupID
+                -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit
+    deleteGroup gid = do
+      response <- H.liftAff $ API.deleteGroup gid
+      case response of
+        Left err -> processError err
+        Right _ -> redirect "/groups"
 
 processError :: forall m. MonadAff m => API.APIError
              -> H.ParentDSL State Query ChildQuery ChildSlot Void m Unit

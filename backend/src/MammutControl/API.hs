@@ -48,6 +48,9 @@ type AuthenticatedAPI =
                 :> Get '[JSON] (JSONWrapper "group" Group)
   :<|> "groups" :> ReqBody '[JSON] GroupData
                 :> PostCreated '[JSON] (JSONWrapper "group" Group)
+  :<|> "groups" :> Capture "group_id" GroupID
+                :> DeleteNoContent '[JSON] NoContent
+
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
                 :> Get '[JSON] (JSONWrapper "users" [User])
   :<|> "groups" :> Capture "group_id" GroupID :> "users"
@@ -74,6 +77,8 @@ authenticatedAPI session =
   :<|> getGroupsAction session
   :<|> getGroupAction
   :<|> createGroupAction session
+  :<|> deleteGroupAction
+
   :<|> getMembersOfGroupAction
   :<|> addUserToGroupAction
   :<|> removeUserFromGroupAction

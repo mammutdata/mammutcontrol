@@ -17,9 +17,6 @@ import Effect.Class (class MonadEffect, liftEffect)
 import Effect.Console (log)
 
 import Web.Event.Event (Event, preventDefault)
-import Web.HTML (window)
-import Web.HTML.Location (setHash)
-import Web.HTML.Window (location)
 
 import Halogen as H
 import Halogen.Aff as HA
@@ -34,6 +31,7 @@ import MammutControl.Components.Common.InputField as InputField
 import MammutControl.Components.UI.MenuBar as MenuBar
 import MammutControl.HTMLHelpers as MHH
 import MammutControl.Routes
+import MammutControl.Utils (redirect)
 
 type State =
   { error    :: forall p i. Maybe (HH.HTML p i)
@@ -122,7 +120,7 @@ eval = case _ of
     response <- H.liftAff $ API.signin st
     case response of
       Left err -> processError err
-      Right _ -> liftEffect $ window >>= location >>= setHash "/"
+      Right _ -> redirect "/"
     pure next
 
 processError :: forall m. MonadAff m => API.APIError

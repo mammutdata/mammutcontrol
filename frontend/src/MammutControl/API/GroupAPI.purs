@@ -9,6 +9,7 @@ module MammutControl.API.GroupAPI
   , getMembersOfGroup
   , removeMemberFromGroup
   , addMemberToGroup
+  , deleteGroup
   ) where
 
 import Prelude
@@ -132,4 +133,11 @@ addMemberToGroup gid email = do
     StatusCode 200 -> do
       obj <- decodeJson resp.body
       obj .? "users"
+    _ -> Left "Unknown error."
+
+deleteGroup :: GroupID -> Aff (Either APIError Unit)
+deleteGroup gid = do
+  response <- apiDelete RF.json $ "/api/groups/" <> unGroupID gid
+  processResponse response \resp -> pure $ case resp.status of
+    StatusCode 204 -> pure unit
     _ -> Left "Unknown error."

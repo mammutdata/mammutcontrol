@@ -3,6 +3,7 @@ module MammutControl.Actions.GroupActions
   , getGroupAction
   , GroupData(..)
   , createGroupAction
+  , deleteGroupAction
   , getMembersOfGroupAction
   , GroupMembershipData(..)
   , addUserToGroupAction
@@ -11,6 +12,8 @@ module MammutControl.Actions.GroupActions
 
 import           Data.Aeson
 import qualified Data.Text as T
+
+import           Servant
 
 import           MammutControl.AccessControl
 import           MammutControl.Actions.Helpers
@@ -44,6 +47,11 @@ createGroupAction session (GroupData name mDescription mWalletID) = do
         , groupCreationTime = ()
         }
   JSONWrapper <$> createGroup group (sessionUserID session)
+
+deleteGroupAction :: MonadAction m => GroupID -> m NoContent
+deleteGroupAction gid = do
+  deleteGroup gid
+  return NoContent
 
 getMembersOfGroupAction :: MonadAction m => GroupID
                         -> m (JSONWrapper "users" [User])

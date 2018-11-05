@@ -16,6 +16,7 @@ module MammutControl.HTMLHelpers
   , input
   , inputNoValidate
   , submitButton
+  , deleteButton
   , inputHelper
   , errorCard
   , box
@@ -25,6 +26,7 @@ module MammutControl.HTMLHelpers
   , spinner
   , lightBand
   , initFormSelects
+  , initModals
   , icon
   , collection
   ) where
@@ -42,6 +44,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 
 foreign import initFormSelects :: Effect Unit
+foreign import initModals :: Effect Unit
 
 container :: HH.ClassName
 container = HH.ClassName "container"
@@ -75,6 +78,9 @@ wavesEffect = HH.ClassName "waves-effect"
 
 wavesLight :: HH.ClassName
 wavesLight = HH.ClassName "waves-light"
+
+red :: HH.ClassName
+red = HH.ClassName "red"
 
 row :: forall p i. HH.Node H.HTMLdiv p i
 row props children = HH.div (HP.class_ (HH.ClassName "row") : props) children
@@ -128,6 +134,13 @@ submitButton props children =
   HH.button
     (HP.classes [btn, wavesEffect, wavesLight]
      : HP.type_ HP.ButtonSubmit
+     : props)
+    children
+
+deleteButton :: forall p i. Array HH.ClassName -> HH.Node H.HTMLa p i
+deleteButton classes props children =
+  HH.a
+    (HP.classes (btn : wavesEffect : wavesLight : red : classes)
      : props)
     children
 
